@@ -1379,9 +1379,9 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='120px 140px 1fr 100px 100px 100px 30px';
+    const COL='130px 150px 200px 100px 100px 110px 30px';
 
-    const BLANK_ROWS=10;
+    const BLANK_ROWS=1;
     const[blankRows,setBlankRows]=useState(()=>
       Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))
     );
@@ -1423,9 +1423,6 @@ function App(){
         if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type||'expense',group:info.group||r.group||group};}
         return{...r,[field]:val};
       });
-      const last=updated[updated.length-1];
-      if(last._bid===bid&&(field==='amount'||field==='note'))
-        return[...updated,{_bid:`${group}_b${Date.now()}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}];
       return updated;
     });
 
@@ -1437,7 +1434,7 @@ function App(){
       const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type||'expense',group:info.group||r.group||group,sortOrder:grpCount*10+10};
       delete e._bid;
       setEntries(p=>[...p,e]);
-      setBlankRows(prev=>prev.map(x=>x._bid===bid?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}:x));
+      setBlankRows(prev=>prev.filter(x=>x._bid!==bid));
       showBadge();
     };
 
@@ -1604,14 +1601,20 @@ function App(){
           </div>
         </div>
 
-        {/* Account balances mini */}
-        <div style={{display:'flex',gap:0,background:accentLight,borderBottom:`1px solid ${borderClr}`,overflowX:'auto'}}>
+        {/* Account balances mini + Add Line button */}
+        <div style={{display:'flex',gap:0,background:accentLight,borderBottom:`1px solid ${borderClr}`,overflowX:'auto',alignItems:'stretch'}}>
           {groupAccounts.map(a=>(
             <div key={a.id} style={{padding:'5px 12px',borderRight:`1px solid ${borderClr}`,flexShrink:0}}>
               <div style={{fontSize:9,color:accentDark,fontWeight:700}}>{a.icon} {a.name}</div>
               <div style={{fontSize:13,fontWeight:900,color:accBal[a.id]>=0?accentDark:'#c62828'}}>{peso(accBal[a.id]||0)}</div>
             </div>
           ))}
+          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',padding:'4px 10px',flexShrink:0}}>
+            <button onClick={()=>setBlankRows(prev=>[...prev,...Array.from({length:10},(_,i)=>({_bid:`${group}_b${Date.now()}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))])}
+              style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
+              ＋ Add Line
+            </button>
+          </div>
         </div>
 
 
@@ -1642,7 +1645,7 @@ function App(){
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
               <div key={e.id}
-                style={{display:'grid',gridTemplateColumns:COL,minWidth:560,background:rowBg,transition:'background .1s'}}
+                style={{display:'grid',gridTemplateColumns:COL,minWidth:820,background:rowBg,transition:'background .1s'}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
 
@@ -1701,7 +1704,7 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:560,background:rowBg}}>
+              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:820,background:rowBg}}>
 
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>

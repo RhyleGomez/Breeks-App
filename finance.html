@@ -1524,8 +1524,12 @@ function App(){
                 <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10}}/>
                 <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
                 <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Note…" style={{background:'inherit',fontSize:11}}/>
-                <AmountCell rowId={e.id} field="inc" value={e.isInc?e.amount:0} color={accentColor} placeholder="—" style={{background:'inherit'}}/>
-                <AmountCell rowId={e.id} field="exp" value={!e.isInc?e.amount:0} color="#e53935" placeholder="—" style={{background:'inherit'}}/>
+                {e.isInc
+                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color={accentColor} placeholder="—" style={{background:'inherit'}}/>
+                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11}}>—</div>}
+                {!e.isInc
+                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color="#e53935" placeholder="—" style={{background:'inherit'}}/>
+                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11}}>—</div>}
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                 </div>

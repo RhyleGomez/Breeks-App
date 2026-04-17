@@ -974,7 +974,7 @@ function App(){
       const r=blankRows.find(x=>x._bid===bid);
       if(!r||!r.accountId||!r.category||!r.amount||parseFloat(r.amount)<=0)return;
       const info=CAT_TYPE[r.category]||{};
-      const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type,group:info.group||r.group};
+      const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type||'expense',group:info.group||r.group||'business'};
       delete e._bid;
       setEntries(p=>[...p,e]);
       setBlankRows(rows=>rows.map(x=>x._bid===bid?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'}:x));
@@ -1262,9 +1262,9 @@ function App(){
                 </div>
                 {/* Income amount */}
                 <div style={{...cellBase,background:'inherit'}}>
-                  {(!hasCat||isInc)&&(
+                  {(!hasCat||isInc||(!isInc&&!isExp))&&(
                     <AmountCell rowId={r._bid} field="amount"
-                      value={hasCat&&isInc?parseFloat(r.amount)||0:0}
+                      value={hasCat&&isInc?parseFloat(r.amount)||0:hasCat&&!isInc&&!isExp?parseFloat(r.amount)||0:0}
                       color={headerGreen} placeholder={hasCat&&isExp?'—':'₱ 0.00'}
                       style={{background:'transparent',border:'none'}}/>
                   )}
@@ -1272,7 +1272,7 @@ function App(){
                 </div>
                 {/* Expense amount */}
                 <div style={{...cellBase,background:'inherit'}}>
-                  {(!hasCat||isExp)&&(
+                  {(!hasCat||isExp)&&!(hasCat&&!isInc&&!isExp)&&(
                     <AmountCell rowId={r._bid} field="amount"
                       value={hasCat&&isExp?parseFloat(r.amount)||0:0}
                       color='#e53935' placeholder={hasCat&&isInc?'—':'₱ 0.00'}
@@ -1352,7 +1352,7 @@ function App(){
     const updateBlank=(bid,field,val)=>setBlankRows(prev=>{
       const updated=prev.map(r=>{
         if(r._bid!==bid)return r;
-        if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type,group:info.group||r.group};}
+        if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type||'expense',group:info.group||r.group||group};}
         return{...r,[field]:val};
       });
       const last=updated[updated.length-1];
@@ -1365,7 +1365,7 @@ function App(){
       const r=blankRows.find(x=>x._bid===bid);
       if(!r||!r.accountId||!r.category||!r.amount||parseFloat(r.amount)<=0)return;
       const info=CAT_TYPE[r.category]||{};
-      const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type,group:info.group||r.group};
+      const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type||'expense',group:info.group||r.group||group};
       delete e._bid;
       setEntries(p=>[...p,e]);
       setBlankRows(prev=>prev.map(x=>x._bid===bid?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}:x));
@@ -1545,20 +1545,28 @@ function App(){
             const isInc=info.type==='income';
             const isExp=info.type==='expense';
             const hasCat=!!r.category;
-            const canSave=r.accountId&&r.category&&parseFloat(r.amount)>0;
+            const canSave=r.accountId&&r.category&&parseFloat(r.amount)>0&&(r.type==='income'||r.type==='expense'||!CAT_TYPE[r.category]||CAT_TYPE[r.category].type);
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
               <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:rowBg}}>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#ccc',borderLeft:'3px solid #e0e0e0'}}>{rows.length+i+1}</div>
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit'}}/>
                 <div style={{...cellBase,background:'inherit'}}>
-                  <div style={{borderBottom:'1px dashed #e0e0e0'}}>
-                    <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
+                  <div style={{borderBottom:'1px dashed #e0e0e0',display:'flex',alignItems:'center'}}>
+                    <div style={{flex:1}}>
+                      <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
+                    </div>
+                    {hasCat&&!isInc&&!isExp&&(
+                      <div style={{display:'flex',gap:2,padding:'2px 4px',flexShrink:0}}>
+                        <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'2px 6px',background:r.type==='income'?'rgba(34,197,94,.3)':'rgba(255,255,255,.05)',border:'1px solid rgba(34,197,94,.4)',borderRadius:3,color:'#22c55e',fontSize:9,fontWeight:700,cursor:'pointer'}}>IN</button>
+                        <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'2px 6px',background:r.type==='expense'?'rgba(239,68,68,.3)':'rgba(255,255,255,.05)',border:'1px solid rgba(239,68,68,.4)',borderRadius:3,color:'#ef4444',fontSize:9,fontWeight:700,cursor:'pointer'}}>OUT</button>
+                      </div>
+                    )}
                   </div>
                   <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Note / description…" style={{borderRight:'none',background:'transparent',fontSize:10}}/>
                 </div>
                 <div style={{...cellBase,background:'inherit'}}>
-                  {(!hasCat||isInc)?<AmountCell rowId={r._bid} field="amount" value={hasCat&&isInc?parseFloat(r.amount)||0:0} color={accentColor} placeholder={hasCat&&isExp?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
+                  {(!hasCat||isInc||(hasCat&&!isInc&&!isExp))?<AmountCell rowId={r._bid} field="amount" value={hasCat&&(isInc||(!isInc&&!isExp))?parseFloat(r.amount)||0:0} color={accentColor} placeholder={hasCat&&isExp?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
                   :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}
                 </div>
                 <div style={{...cellBase,background:'inherit'}}>

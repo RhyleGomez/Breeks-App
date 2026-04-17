@@ -80,8 +80,8 @@ BIZ_INCOME_CATS.forEach(c=>CAT_TYPE[c]={type:'income',group:'business'});
 BIZ_EXPENSE_CATS.forEach(c=>CAT_TYPE[c]={type:'expense',group:'business'});
 PER_INCOME_CATS.forEach(c=>CAT_TYPE[c]={type:'income',group:'personal'});
 PER_EXPENSE_CATS.forEach(c=>CAT_TYPE[c]={type:'expense',group:'personal'});
-CAT_TYPE['Transfer In']={type:'income',group:'business'};
-CAT_TYPE['Transfer Out']={type:'expense',group:'business'};
+CAT_TYPE['Transfer In']={type:'income'};
+CAT_TYPE['Transfer Out']={type:'expense'};
 
 const DEFAULT_ACCOUNTS=[
   {id:'biz_main',name:'Business Account',type:'business',icon:'💼',color:'#00c4d4',openingBalance:0,openingDate:new Date().toISOString().slice(0,10)},
@@ -531,8 +531,8 @@ function App(){
     entries.forEach(e=>{
       if(!b.hasOwnProperty(e.accountId))return;
       const info=CAT_TYPE[e.category]||{};
-      const grp=info.group||e.group||'business';
-      const typ=info.type||e.type||'income';
+      // Use entry's own type — don't let CAT_TYPE override for Transfer entries
+      const typ=e.type||info.type||'income';
       if(typ==='income')b[e.accountId]+=(parseFloat(e.amount)||0);
       else b[e.accountId]-=(parseFloat(e.amount)||0);
     });

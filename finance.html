@@ -485,6 +485,7 @@ function App(){
   },[entries,accounts,budgets,liabilities]);
 
   const[view,setView]=useState('dashboard');
+  const[activeTab,setActiveTab]=useState('business');
   const[dashTab,setDashTab]=useState('business');
   const[showAdd,setShowAdd]=useState(false);
   const[editEntry,setEditEntry]=useState(null);
@@ -1294,12 +1295,8 @@ function App(){
             const rowBg=(rows.length+i)%2===0?'#fff':'#f9fff9';
             return(
               <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:750,background:rowBg}}>
-                {/* # */}
-                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:10,borderLeft:'3px solid #e0e0e0'}}>
-                  {rows.length+i+1}
-                </div>
                 {/* Date */}
-                <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit'}}/>
+                <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
                 {/* Account */}
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…"
                   options={accOptions} style={{background:'inherit'}}
@@ -1369,7 +1366,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='28px 78px 145px 120px 1fr 100px 100px 100px 60px';
+    const COL='76px 140px 1fr 108px 108px 108px 56px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1505,6 +1502,66 @@ function App(){
       );
     };
 
+    // Inline income/expense cells for blank rows
+    const AmountCellIncome=({rowId,value,color})=>{
+      const isActive=activeCell?.rowId===rowId&&activeCell?.col==='inc_amount';
+      const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
+      return(
+        <div style={{...cellBase,background:'transparent',border:'none'}}
+          onClick={()=>{if(!isActive){setActiveCell({rowId,col:'inc_amount'});setEditingVal(value>0?String(value):'');}}}>
+          {isActive
+            ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
+                onChange={e=>setEditingVal(e.target.value)}
+                onBlur={()=>{
+                  const r=blankRows.find(x=>x._bid===rowId);
+                  if(r){
+                    updateBlank(rowId,'amount',editingVal);
+                    updateBlank(rowId,'type','income');
+                    if(r.accountId&&r.category&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
+                    else if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
+                  }
+                  setActiveCell(null);
+                }}
+                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
+                  const r=blankRows.find(x=>x._bid===rowId);
+                  if(r){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','income');
+                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);}
+                  setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
+            :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
+        </div>
+      );
+    };
+
+    const AmountCellExpense=({rowId,value,color})=>{
+      const isActive=activeCell?.rowId===rowId&&activeCell?.col==='exp_amount';
+      const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
+      return(
+        <div style={{...cellBase,background:'transparent',border:'none'}}
+          onClick={()=>{if(!isActive){setActiveCell({rowId,col:'exp_amount'});setEditingVal(value>0?String(value):'');}}}>
+          {isActive
+            ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
+                onChange={e=>setEditingVal(e.target.value)}
+                onBlur={()=>{
+                  const r=blankRows.find(x=>x._bid===rowId);
+                  if(r){
+                    updateBlank(rowId,'amount',editingVal);
+                    updateBlank(rowId,'type','expense');
+                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
+                  }
+                  setActiveCell(null);
+                }}
+                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
+                  const r=blankRows.find(x=>x._bid===rowId);
+                  if(r){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','expense');
+                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);}
+                  setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
+            :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
+        </div>
+      );
+    };
+
     const accOpts=<>
       {groupAccounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
     </>;
@@ -1564,18 +1621,16 @@ function App(){
         <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['#','Date','Account','Category','Note / Description','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5&&i<=7?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['Date','Account','Category / Description','Income','Expense','Balance',''].map((h,i)=>(
+              <div key={i} style={{padding:'9px 10px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3&&i<=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
           {/* Opening row */}
-          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
-            <div style={{padding:'6px 8px',textAlign:'center',color:'#999',fontSize:10,borderRight:`1px solid ${borderClr}`}}>—</div>
+          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
             <div style={{padding:'6px 8px',fontSize:10,color:'#666',borderRight:`1px solid ${borderClr}`}}>Opening</div>
             <div style={{padding:'6px 8px',fontSize:10,color:'#888',borderRight:`1px solid ${borderClr}`}}>—</div>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
-            <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark,borderRight:`1px solid ${borderClr}`}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1588,19 +1643,20 @@ function App(){
             const acc=accounts.find(a=>a.id===e.accountId);
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
-              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:rowBg}}
+              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
-                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#aaa',borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}>{i+1}</div>
-                <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10}}/>
-                <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
-                <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Note…" style={{background:'inherit',fontSize:11}}/>
+                <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}/>
+                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                  <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px dashed rgba(0,0,0,.06)',background:'transparent'}}/>
+                  <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#666'}}/>
+                </div>
                 {e.isInc
-                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color={accentColor} placeholder="—" style={{background:'inherit'}}/>
-                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11}}>—</div>}
+                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color={accentColor} placeholder="—" style={{background:'inherit',textAlign:'right'}}/>
+                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11,borderRight:`1px solid ${borderClr}`}}>—</div>}
                 {!e.isInc
-                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color="#e53935" placeholder="—" style={{background:'inherit'}}/>
-                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11}}>—</div>}
+                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color="#e53935" placeholder="—" style={{background:'inherit',textAlign:'right'}}/>
+                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11,borderRight:`1px solid ${borderClr}`}}>—</div>}
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                 </div>
@@ -1615,7 +1671,7 @@ function App(){
           {/* Totals */}
           {rows.length>0&&(
             <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
-              <div style={{padding:'7px 8px',gridColumn:'1/6',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL — {rows.length}</div>
+              <div style={{padding:'7px 8px',gridColumn:'1/4',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL — {rows.length}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#2e7d32',borderRight:`1px solid ${borderClr}`}}>₱{Number(totInc).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#c62828',borderRight:`1px solid ${borderClr}`}}>₱{Number(totExp).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:closingBal>=0?accentDark:'#c62828'}}>₱{Number(Math.abs(closingBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1631,27 +1687,36 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:rowBg}}>
-                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#ccc',borderLeft:'3px solid #e0e0e0'}}>{rows.length+i+1}</div>
-                <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit'}}/>
+              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}>
+                <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
-                <div style={{...cellBase,background:'inherit',position:'relative'}}>
-                  <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
-                  {hasCat&&!isInc&&!isExp&&(
-                    <div style={{position:'absolute',top:4,right:4,display:'flex',gap:2,zIndex:5}}>
-                      <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'1px 5px',background:r.type==='income'?'rgba(34,197,94,.4)':'rgba(0,0,0,.1)',border:'1px solid rgba(34,197,94,.5)',borderRadius:3,color:'#22c55e',fontSize:8,fontWeight:700,cursor:'pointer'}}>IN</button>
-                      <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'1px 5px',background:r.type==='expense'?'rgba(239,68,68,.4)':'rgba(0,0,0,.1)',border:'1px solid rgba(239,68,68,.5)',borderRadius:3,color:'#ef4444',fontSize:8,fontWeight:700,cursor:'pointer'}}>OUT</button>
+                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column',justifyContent:'center',position:'relative'}}>
+                  <div style={{display:'flex',alignItems:'center',borderBottom:'1px dashed rgba(0,0,0,.06)'}}>
+                    <div style={{flex:1}}>
+                      <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
                     </div>
-                  )}
+                    {hasCat&&!isInc&&!isExp&&(
+                      <div style={{display:'flex',gap:2,padding:'0 4px',flexShrink:0}}>
+                        <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'2px 5px',background:r.type==='income'?'rgba(34,197,94,.3)':'rgba(0,0,0,.05)',border:'1px solid rgba(34,197,94,.4)',borderRadius:3,color:'#22c55e',fontSize:8,fontWeight:700,cursor:'pointer'}}>IN</button>
+                        <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'2px 5px',background:r.type==='expense'?'rgba(239,68,68,.3)':'rgba(0,0,0,.05)',border:'1px solid rgba(239,68,68,.4)',borderRadius:3,color:'#ef4444',fontSize:8,fontWeight:700,cursor:'pointer'}}>OUT</button>
+                      </div>
+                    )}
+                  </div>
+                  <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10}}/>
                 </div>
-                <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{background:'inherit',fontSize:11}}/>
-                <div style={{...cellBase,background:'inherit'}}>
-                  {(!hasCat||isInc||(hasCat&&!isInc&&!isExp))?<AmountCell rowId={r._bid} field="amount" value={hasCat&&(isInc||(!isInc&&!isExp))?parseFloat(r.amount)||0:0} color={accentColor} placeholder={hasCat&&isExp?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
-                  :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}
+                {/* Income column — always editable, disabled if category is expense */}
+                <div style={{...cellBase,background:isExp?'rgba(0,0,0,.02)':'inherit'}}>
+                  {isExp
+                    ?<div style={{padding:'6px 10px',color:'#ccc',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>
+                    :<AmountCellIncome rowId={r._bid} value={isInc?parseFloat(r.amount)||0:0} color={accentColor}/>
+                  }
                 </div>
-                <div style={{...cellBase,background:'inherit'}}>
-                  {(!hasCat||isExp)?<AmountCell rowId={r._bid} field="amount" value={hasCat&&isExp?parseFloat(r.amount)||0:0} color="#e53935" placeholder={hasCat&&isInc?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
-                  :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}
+                {/* Expense column — always editable, disabled if category is income */}
+                <div style={{...cellBase,background:isInc?'rgba(0,0,0,.02)':'inherit'}}>
+                  {isInc
+                    ?<div style={{padding:'6px 10px',color:'#ccc',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>
+                    :<AmountCellExpense rowId={r._bid} value={isExp?parseFloat(r.amount)||0:0} color="#e53935"/>
+                  }
                 </div>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic',borderRight:`1px solid ${borderClr}`}}>auto</div>
                 <div style={{...cellBase,background:'inherit',borderRight:'none'}}/>
@@ -1665,7 +1730,6 @@ function App(){
 
   // ── SPLIT JOURNAL VIEW ─────────────────────────────────────────────────────
   const SplitJournalView=()=>{
-    const[activeTab,setActiveTab]=useState('business');
     const TABS=[
       {key:'business',label:'💼 Business',color:'#4caf50'},
       {key:'personal',label:'👤 Personal',color:'#9c27b0'},

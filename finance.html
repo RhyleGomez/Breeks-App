@@ -1316,7 +1316,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='32px 88px 1fr 110px 110px 90px 64px';
+    const COL='28px 80px 120px 1fr 100px 100px 100px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1473,32 +1473,42 @@ function App(){
 
         {/* Summary strip */}
         <div style={{display:'flex',gap:0,background:'#fff',borderBottom:`2px solid ${accentColor}`}}>
-          {[['In',totInc,'#2e7d32'],['Out',totExp,'#c62828'],['Entries',rows.length,accentColor,true]].map(([l,v,c,isNum])=>(
+          {[['In',totInc,'#2e7d32'],['Out',totExp,'#c62828'],['Entries',rows.length,accentColor,true]].map(([l,v,col,isNum])=>(
             <div key={l} style={{flex:1,padding:'5px 10px',borderRight:`1px solid ${borderClr}`,textAlign:'center'}}>
               <div style={{fontSize:8,color:'#888',textTransform:'uppercase',fontWeight:700}}>{l}</div>
-              <div style={{fontSize:12,fontWeight:900,color:c}}>{isNum?v:peso(v)}</div>
+              <div style={{fontSize:12,fontWeight:900,color:col}}>{isNum?v:peso(v)}</div>
             </div>
           ))}
+          <div style={{padding:'4px 8px',display:'flex',alignItems:'center'}}>
+            <button onClick={()=>{
+              blankRows.forEach(r=>{
+                if(r.accountId&&r.category&&parseFloat(r.amount)>0)saveBlankRow(r._bid);
+              });
+            }} style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
+              💾 Save Entries
+            </button>
+          </div>
         </div>
 
         {/* Journal table */}
         <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['#','Date','Category / Note','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['#','Date','Account','Category / Note','Income','Expense','Balance'].map((h,i)=>(
+              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=4?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
           {/* Opening row */}
-          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
+          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
             <div style={{padding:'6px 8px',textAlign:'center',color:'#999',fontSize:10,borderRight:`1px solid ${borderClr}`}}>—</div>
             <div style={{padding:'6px 8px',fontSize:10,color:'#666',borderRight:`1px solid ${borderClr}`}}>Opening</div>
+            <div style={{padding:'6px 8px',fontSize:10,color:'#888',borderRight:`1px solid ${borderClr}`}}>—</div>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
-            <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style={{padding:'6px 8px'}}/>
+            <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark,borderRight:`1px solid ${borderClr}`}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+
           </div>
 
           {/* Data rows */}
@@ -1506,7 +1516,7 @@ function App(){
             const acc=accounts.find(a=>a.id===e.accountId);
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
-              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:rowBg}}
+              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:rowBg}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#aaa',borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}>{i+1}</div>
@@ -1521,8 +1531,8 @@ function App(){
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                 </div>
                 <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'center',gap:2,padding:'3px 4px'}}>
-                  <button onClick={()=>openEdit(e)} style={{flex:1,padding:'3px 0',background:accentLight,border:`1px solid ${accentColor}`,color:accentDark,borderRadius:3,cursor:'pointer',fontSize:10}}>✏️</button>
-                  <button onClick={()=>deleteEntry(e.id)} style={{flex:1,padding:'3px 0',background:'#ffebee',border:'1px solid #ef9a9a',color:'#c62828',borderRadius:3,cursor:'pointer',fontSize:10}}>🗑</button>
+                  <button onClick={()=>openEdit(e)} style={{flex:1,padding:'3px 0',background:accentLight,border:`1px solid ${accentColor}`,color:accentDark,borderRadius:3,cursor:'pointer',fontSize:9}}>✏️</button>
+                  <button onClick={()=>deleteEntry(e.id)} style={{flex:1,padding:'3px 0',background:'#ffebee',border:'1px solid #ef9a9a',color:'#c62828',borderRadius:3,cursor:'pointer',fontSize:9}}>🗑</button>
                 </div>
               </div>
             );
@@ -1530,8 +1540,8 @@ function App(){
 
           {/* Totals */}
           {rows.length>0&&(
-            <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
-              <div style={{padding:'7px 8px',gridColumn:'1/4',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL</div>
+            <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
+              <div style={{padding:'7px 8px',gridColumn:'1/5',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#2e7d32',borderRight:`1px solid ${borderClr}`}}>₱{Number(totInc).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#c62828',borderRight:`1px solid ${borderClr}`}}>₱{Number(totExp).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:closingBal>=0?accentDark:'#c62828'}}>₱{Number(Math.abs(closingBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1545,12 +1555,12 @@ function App(){
             const isInc=info.type==='income';
             const isExp=info.type==='expense';
             const hasCat=!!r.category;
-            const canSave=r.accountId&&r.category&&parseFloat(r.amount)>0&&(r.type==='income'||r.type==='expense'||!CAT_TYPE[r.category]||CAT_TYPE[r.category].type);
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:rowBg}}>
+              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:rowBg}}>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#ccc',borderLeft:'3px solid #e0e0e0'}}>{rows.length+i+1}</div>
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit'}}/>
+                <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
                 <div style={{...cellBase,background:'inherit'}}>
                   <div style={{borderBottom:'1px dashed #e0e0e0',display:'flex',alignItems:'center'}}>
                     <div style={{flex:1}}>
@@ -1573,14 +1583,7 @@ function App(){
                   {(!hasCat||isExp)?<AmountCell rowId={r._bid} field="amount" value={hasCat&&isExp?parseFloat(r.amount)||0:0} color="#e53935" placeholder={hasCat&&isInc?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
                   :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}
                 </div>
-                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic'}}>auto</div>
-                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',padding:'3px 4px'}}>
-                  {canSave?(
-                    <button onClick={()=>saveBlankRow(r._bid)} style={{width:'100%',padding:'5px 0',background:accentColor,border:'none',borderRadius:4,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:10}}>💾</button>
-                  ):(
-                    <div style={{width:'100%',textAlign:'center',fontSize:9,color:'#ccc'}}>fill</div>
-                  )}
-                </div>
+                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic'}}>auto</div>
               </div>
             );
           })}

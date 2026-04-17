@@ -1316,7 +1316,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='28px 80px 120px 1fr 100px 100px 100px';
+    const COL='28px 80px 120px 1fr 140px 100px 100px 100px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1494,8 +1494,8 @@ function App(){
         <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['#','Date','Account','Category / Note','Income','Expense','Balance'].map((h,i)=>(
-              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=4?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['#','Date','Account','Category','Note / Description','Income','Expense','Balance'].map((h,i)=>(
+              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
@@ -1505,6 +1505,7 @@ function App(){
             <div style={{padding:'6px 8px',fontSize:10,color:'#666',borderRight:`1px solid ${borderClr}`}}>Opening</div>
             <div style={{padding:'6px 8px',fontSize:10,color:'#888',borderRight:`1px solid ${borderClr}`}}>—</div>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
+            <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark,borderRight:`1px solid ${borderClr}`}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1521,10 +1522,8 @@ function App(){
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#aaa',borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}>{i+1}</div>
                 <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10}}/>
-                <div style={{...cellBase,background:'inherit'}}>
-                  <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px dashed #eee',background:'transparent'}}/>
-                  <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Note…" style={{borderRight:'none',background:'transparent',fontSize:10}}/>
-                </div>
+                <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
+                <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Note…" style={{background:'inherit',fontSize:11}}/>
                 <AmountCell rowId={e.id} field="inc" value={e.isInc?e.amount:0} color={accentColor} placeholder="—" style={{background:'inherit'}}/>
                 <AmountCell rowId={e.id} field="exp" value={!e.isInc?e.amount:0} color="#e53935" placeholder="—" style={{background:'inherit'}}/>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
@@ -1541,7 +1540,7 @@ function App(){
           {/* Totals */}
           {rows.length>0&&(
             <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
-              <div style={{padding:'7px 8px',gridColumn:'1/5',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL</div>
+              <div style={{padding:'7px 8px',gridColumn:'1/6',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#2e7d32',borderRight:`1px solid ${borderClr}`}}>₱{Number(totInc).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#c62828',borderRight:`1px solid ${borderClr}`}}>₱{Number(totExp).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:closingBal>=0?accentDark:'#c62828'}}>₱{Number(Math.abs(closingBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1561,20 +1560,16 @@ function App(){
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#ccc',borderLeft:'3px solid #e0e0e0'}}>{rows.length+i+1}</div>
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
-                <div style={{...cellBase,background:'inherit'}}>
-                  <div style={{borderBottom:'1px dashed #e0e0e0',display:'flex',alignItems:'center'}}>
-                    <div style={{flex:1}}>
-                      <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
+                <div style={{...cellBase,background:'inherit',position:'relative'}}>
+                  <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
+                  {hasCat&&!isInc&&!isExp&&(
+                    <div style={{position:'absolute',top:4,right:4,display:'flex',gap:2,zIndex:5}}>
+                      <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'1px 5px',background:r.type==='income'?'rgba(34,197,94,.4)':'rgba(0,0,0,.1)',border:'1px solid rgba(34,197,94,.5)',borderRadius:3,color:'#22c55e',fontSize:8,fontWeight:700,cursor:'pointer'}}>IN</button>
+                      <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'1px 5px',background:r.type==='expense'?'rgba(239,68,68,.4)':'rgba(0,0,0,.1)',border:'1px solid rgba(239,68,68,.5)',borderRadius:3,color:'#ef4444',fontSize:8,fontWeight:700,cursor:'pointer'}}>OUT</button>
                     </div>
-                    {hasCat&&!isInc&&!isExp&&(
-                      <div style={{display:'flex',gap:2,padding:'2px 4px',flexShrink:0}}>
-                        <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'2px 6px',background:r.type==='income'?'rgba(34,197,94,.3)':'rgba(255,255,255,.05)',border:'1px solid rgba(34,197,94,.4)',borderRadius:3,color:'#22c55e',fontSize:9,fontWeight:700,cursor:'pointer'}}>IN</button>
-                        <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'2px 6px',background:r.type==='expense'?'rgba(239,68,68,.3)':'rgba(255,255,255,.05)',border:'1px solid rgba(239,68,68,.4)',borderRadius:3,color:'#ef4444',fontSize:9,fontWeight:700,cursor:'pointer'}}>OUT</button>
-                      </div>
-                    )}
-                  </div>
-                  <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Note / description…" style={{borderRight:'none',background:'transparent',fontSize:10}}/>
+                  )}
                 </div>
+                <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{background:'inherit',fontSize:11}}/>
                 <div style={{...cellBase,background:'inherit'}}>
                   {(!hasCat||isInc||(hasCat&&!isInc&&!isExp))?<AmountCell rowId={r._bid} field="amount" value={hasCat&&(isInc||(!isInc&&!isExp))?parseFloat(r.amount)||0:0} color={accentColor} placeholder={hasCat&&isExp?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
                   :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}

@@ -1316,7 +1316,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='28px 80px 120px 1fr 140px 100px 100px 100px';
+    const COL='28px 78px 108px 108px 1fr 100px 100px 100px 60px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1426,9 +1426,16 @@ function App(){
                   } else updateEntry(rowId,'amount',editingVal);
                   setActiveCell(null);
                 }}
-                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
-                  if(rowId.startsWith(group+'_b')){updateBlank(rowId,'amount',editingVal);const r=blankRows.find(x=>x._bid===rowId);if(r&&r.accountId&&r.category&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);}
-                  else updateEntry(rowId,'amount',editingVal);setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();
+                  if(rowId.startsWith(group+'_b')){
+                    updateBlank(rowId,'amount',editingVal);
+                    const r=blankRows.find(x=>x._bid===rowId);
+                    if(r&&r.accountId&&r.category&&parseFloat(editingVal)>0){
+                      setTimeout(()=>saveBlankRow(rowId),80);
+                    }
+                  } else updateEntry(rowId,'amount',editingVal);
+                  setActiveCell(null);
+                }if(ev.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#ddd'}}>{display||placeholder}</div>}
         </div>
@@ -1495,7 +1502,7 @@ function App(){
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
             {['#','Date','Account','Category','Note / Description','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5&&i<8?'right':'center',whiteSpace:'nowrap'}}>{h}</div>
+              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5&&i<=7?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
@@ -1628,7 +1635,7 @@ function App(){
         </div>
         {/* Full width panel */}
         <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-          <PanelJournal key={activeTab} group={activeTab}/>
+          <PanelJournal group={activeTab}/>
         </div>
       </div>
     );

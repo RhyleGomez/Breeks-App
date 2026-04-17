@@ -1379,7 +1379,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='90px 1fr 108px 108px 108px';
+    const COL='20px 90px 1fr 108px 108px 108px 36px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1387,6 +1387,29 @@ function App(){
     );
     const[activeCell,setActiveCell]=useState(null);
     const[editingVal,setEditingVal]=useState('');
+    const[dragOverIdx,setDragOverIdx]=useState(null);
+    const dragSrcIdx=useRef(null);
+
+    const moveEntry=(fromIdx,toIdx)=>{
+      if(fromIdx===toIdx)return;
+      setEntries(prev=>{
+        // Get group entries in order
+        const grpEntries=[...prev]
+          .filter(e=>{const info=CAT_TYPE[e.category]||{};return(info.group||e.group)===group;})
+          .sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+        if(fromIdx<0||toIdx<0||fromIdx>=grpEntries.length||toIdx>=grpEntries.length)return prev;
+        // Reorder by swapping dates
+        const ids=grpEntries.map(e=>e.id);
+        const dates=grpEntries.map(e=>e.date);
+        const movedDate=dates.splice(fromIdx,1)[0];
+        dates.splice(toIdx,0,movedDate);
+        return prev.map(e=>{
+          const i=ids.indexOf(e.id);
+          if(i>=0)return{...e,date:dates[i]};
+          return e;
+        });
+      });
+    };
 
     // Entries for this group only
     const groupEntries=useMemo(()=>[...entries]
@@ -1611,16 +1634,17 @@ function App(){
 
 
         {/* Journal table */}
-        <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',marginLeft:22}}>
+        <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['Date','Account / Category','Income','Expense','Balance'].map((h,i)=>(
-              <div key={i} style={{padding:'9px 10px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=2?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['','Date','Account / Category','Income','Expense','Balance',''].map((h,i)=>(
+              <div key={i} style={{padding:'9px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3&&i<=5?'right':'center',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
           {/* Opening row */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
+            <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
@@ -1634,12 +1658,25 @@ function App(){
             const acc=accounts.find(a=>a.id===e.accountId);
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
-              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg,position:'relative'}}
-                onMouseEnter={ev=>{ev.currentTarget.style.background=accentLight;const btn=ev.currentTarget.querySelector('.del-row-btn');if(btn)btn.style.opacity='1';}}
-                onMouseLeave={ev=>{ev.currentTarget.style.background=rowBg;const btn=ev.currentTarget.querySelector('.del-row-btn');if(btn)btn.style.opacity='0';}}>
-                {/* Hover delete button on left edge */}
-                <button className="del-row-btn" onClick={()=>{if(window.confirm('Delete this entry?'))deleteEntry(e.id);}}
-                  style={{position:'absolute',left:-20,top:'50%',transform:'translateY(-50%)',width:18,height:18,background:'#ef4444',border:'none',borderRadius:'50%',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:0,transition:'opacity .15s',zIndex:10,lineHeight:1}}>×</button>
+              <div key={e.id}
+                style={{display:'grid',gridTemplateColumns:COL,minWidth:500,
+                  background:dragOverIdx===i?accentColor+'22':rowBg,
+                  borderTop:dragOverIdx===i?`2px solid ${accentColor}`:'2px solid transparent',
+                  transition:'background .1s'}}
+                onMouseEnter={ev=>{if(dragSrcIdx.current===null)ev.currentTarget.style.background=accentLight;}}
+                onMouseLeave={ev=>{if(dragSrcIdx.current===null)ev.currentTarget.style.background=rowBg;}}
+                onDragOver={ev=>{ev.preventDefault();setDragOverIdx(i);}}
+                onDrop={()=>{if(dragSrcIdx.current!==null){moveEntry(dragSrcIdx.current,i);dragSrcIdx.current=null;setDragOverIdx(null);}}}
+                onDragEnd={()=>{dragSrcIdx.current=null;setDragOverIdx(null);}}>
+                {/* Drag handle */}
+                <div
+                  draggable
+                  onDragStart={ev=>{ev.dataTransfer.effectAllowed='move';dragSrcIdx.current=i;ev.currentTarget.parentElement.style.opacity='0.4';}}
+                  onDragEnd={ev=>{ev.currentTarget.parentElement.style.opacity='1';dragSrcIdx.current=null;setDragOverIdx(null);}}
+                  style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',cursor:'grab',color:'#bbb',fontSize:14,userSelect:'none',touchAction:'none'}}
+                  title="Drag to reorder">
+                  ⠿
+                </div>
                 <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}/>
                 <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column'}}>
                   <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.06)',background:'transparent'}}/>
@@ -1672,8 +1709,14 @@ function App(){
                     </div>}
                 </div>
                 {/* Balance */}
-                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
+                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
+                </div>
+                {/* Delete button */}
+                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'center',padding:'3px 4px'}}>
+                  <button onClick={()=>{if(window.confirm('Delete this entry?'))deleteEntry(e.id);}}
+                    title="Delete row"
+                    style={{width:24,height:24,background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:4,color:'#ef4444',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
                 </div>
               </div>
             );
@@ -1690,6 +1733,7 @@ function App(){
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
               <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}>
+                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'center',color:'#ddd',fontSize:11}}>⋮⋮</div>
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
                 <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column'}}>
                   <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.04)',background:'transparent',fontSize:10,color:'#888'}}/>

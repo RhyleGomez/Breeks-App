@@ -1379,9 +1379,9 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='90px 1fr 108px 108px 108px 36px';
+    const COL='120px 140px 1fr 100px 100px 100px 30px';
 
-    const BLANK_ROWS=6;
+    const BLANK_ROWS=10;
     const[blankRows,setBlankRows]=useState(()=>
       Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))
     );
@@ -1617,11 +1617,11 @@ function App(){
 
 
         {/* Journal table */}
-        <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
+        <div style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['Date','Account / Category','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'9px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=2&&i<=4?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(
+              <div key={i} style={{padding:'9px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3&&i<=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
@@ -1642,7 +1642,7 @@ function App(){
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
               <div key={e.id}
-                style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg,transition:'background .1s'}}
+                style={{display:'grid',gridTemplateColumns:COL,minWidth:560,background:rowBg,transition:'background .1s'}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
 
@@ -1701,14 +1701,12 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}>
+              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:560,background:rowBg}}>
 
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
-                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column'}}>
-                  <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.04)',background:'transparent',fontSize:10,color:'#888'}}/>
-                  <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.06)',background:'transparent'}}/>
-                  <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#aaa'}}/>
-                </div>
+                <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
+                <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
+                <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{background:'inherit',fontSize:10,color:'#888'}}/>
                 {/* Income column — always editable, disabled if category is expense */}
                 <div style={{...cellBase,background:isExp?'rgba(0,0,0,.02)':'inherit'}}>
                   {isExp

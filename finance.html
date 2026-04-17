@@ -340,6 +340,19 @@ function LockScreen({onUnlock}){
 function App(){
   const[locked,setLocked]=useState(true);
 
+  // ── CTRL+S GLOBAL SAVE ──────────────────────────────────────────────────
+  useEffect(()=>{
+    const handleKeyDown=(e)=>{
+      if((e.ctrlKey||e.metaKey)&&e.key==='s'){
+        e.preventDefault();
+        if(GDrive.getToken())driveSave();
+        showBadge();
+      }
+    };
+    window.addEventListener('keydown',handleKeyDown);
+    return()=>window.removeEventListener('keydown',handleKeyDown);
+  },[locked]);
+
   // ── AUTO-LOCK TIMER ──────────────────────────────────────────────────────
   const lockTimer=useRef(null);
   const resetLockTimer=useCallback(()=>{
@@ -1366,7 +1379,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='76px 140px 1fr 108px 108px 108px 56px';
+    const COL='90px 1fr 108px 108px 108px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1588,67 +1601,31 @@ function App(){
         {/* Account balances mini */}
         <div style={{display:'flex',gap:0,background:accentLight,borderBottom:`1px solid ${borderClr}`,overflowX:'auto'}}>
           {groupAccounts.map(a=>(
-            <div key={a.id} style={{padding:'6px 12px',borderRight:`1px solid ${borderClr}`,flexShrink:0,minWidth:100}}>
-              <div style={{fontSize:9,color:accentDark,fontWeight:700,marginBottom:1}}>{a.icon} {a.name}</div>
+            <div key={a.id} style={{padding:'5px 12px',borderRight:`1px solid ${borderClr}`,flexShrink:0}}>
+              <div style={{fontSize:9,color:accentDark,fontWeight:700}}>{a.icon} {a.name}</div>
               <div style={{fontSize:13,fontWeight:900,color:accBal[a.id]>=0?accentDark:'#c62828'}}>{peso(accBal[a.id]||0)}</div>
             </div>
           ))}
-          <div style={{padding:'6px 12px',marginLeft:'auto',flexShrink:0}}>
-            <div style={{fontSize:9,color:'#888',fontWeight:700,marginBottom:1}}>NET</div>
-            <div style={{fontSize:13,fontWeight:900,color:totInc-totExp>=0?accentDark:'#c62828'}}>{peso(totInc-totExp)}</div>
-          </div>
         </div>
 
-        {/* Summary strip */}
-        <div style={{display:'flex',gap:0,background:'#fff',borderBottom:`2px solid ${accentColor}`}}>
-          {[['In',totInc,'#2e7d32'],['Out',totExp,'#c62828'],['Entries',rows.length,accentColor,true]].map(([l,v,col,isNum])=>(
-            <div key={l} style={{flex:1,padding:'5px 10px',borderRight:`1px solid ${borderClr}`,textAlign:'center'}}>
-              <div style={{fontSize:8,color:'#888',textTransform:'uppercase',fontWeight:700}}>{l}</div>
-              <div style={{fontSize:12,fontWeight:900,color:col}}>{isNum?v:peso(v)}</div>
-            </div>
-          ))}
-          <div style={{padding:'4px 8px',display:'flex',alignItems:'center',gap:6}}>
-            <button onClick={()=>{
-              // Fix entries where type doesn't match CAT_TYPE
-              setEntries(prev=>prev.map(e=>{
-                const info=CAT_TYPE[e.category];
-                if(info&&info.type&&info.type!==e.type){
-                  return{...e,type:info.type,group:info.group||e.group};
-                }
-                return e;
-              }));
-              showBadge();
-            }} style={{padding:'5px 10px',background:'rgba(239,68,68,.1)',border:'1px solid #ef4444',borderRadius:6,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Fix entries where income/expense type is wrong">
-              🔧 Fix Types
-            </button>
-            <button onClick={()=>{
-              blankRows.forEach(r=>{
-                if(r.accountId&&r.category&&parseFloat(r.amount)>0)saveBlankRow(r._bid);
-              });
-            }} style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
-              💾 Save Entries
-            </button>
-          </div>
-        </div>
+
 
         {/* Journal table */}
-        <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
+        <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',marginLeft:22}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['Date','Account','Category / Description','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'9px 10px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3&&i<=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['Date','Account / Category','Income','Expense','Balance'].map((h,i)=>(
+              <div key={i} style={{padding:'9px 10px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=2?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
           {/* Opening row */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
-            <div style={{padding:'6px 8px',fontSize:10,color:'#666',borderRight:`1px solid ${borderClr}`}}>Opening</div>
-            <div style={{padding:'6px 8px',fontSize:10,color:'#888',borderRight:`1px solid ${borderClr}`}}>—</div>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark,borderRight:`1px solid ${borderClr}`}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style={{padding:'6px 8px'}}/>
+
 
           </div>
 
@@ -1657,74 +1634,52 @@ function App(){
             const acc=accounts.find(a=>a.id===e.accountId);
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
-              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}
-                onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
-                onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
+              <div key={e.id} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg,position:'relative'}}
+                onMouseEnter={ev=>{ev.currentTarget.style.background=accentLight;const btn=ev.currentTarget.querySelector('.del-row-btn');if(btn)btn.style.opacity='1';}}
+                onMouseLeave={ev=>{ev.currentTarget.style.background=rowBg;const btn=ev.currentTarget.querySelector('.del-row-btn');if(btn)btn.style.opacity='0';}}>
+                {/* Hover delete button on left edge */}
+                <button className="del-row-btn" onClick={()=>{if(window.confirm('Delete this entry?'))deleteEntry(e.id);}}
+                  style={{position:'absolute',left:-20,top:'50%',transform:'translateY(-50%)',width:18,height:18,background:'#ef4444',border:'none',borderRadius:'50%',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:0,transition:'opacity .15s',zIndex:10,lineHeight:1}}>×</button>
                 <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}/>
-                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                  <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px dashed rgba(0,0,0,.06)',background:'transparent'}}/>
-                  <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#666'}}/>
+                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column'}}>
+                  <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.06)',background:'transparent'}}/>
+                  <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#888'}}/>
                 </div>
-                {/* Income cell for existing entries */}
-                <div style={{...cellBase,background:!e.isInc?'rgba(0,0,0,.02)':'inherit'}}
-                  onClick={()=>{
-                    if(!e.isInc){
-                      // Switch to income
-                      updateEntry(e.id,'type','income');
-                      const info=CAT_TYPE[e.category]||{};
-                      if(!info.type)updateEntry(e.id,'type','income');
-                    }
-                    setActiveCell({rowId:e.id,col:'inc_data'});setEditingVal(e.isInc?String(e.amount):'');
-                  }}>
+                {/* Income cell */}
+                <div style={{...cellBase,background:'inherit',cursor:'text'}}
+                  onClick={()=>{setActiveCell({rowId:e.id,col:'inc_data'});setEditingVal(e.isInc?String(e.amount):'');}}>
                   {activeCell?.rowId===e.id&&activeCell?.col==='inc_data'
                     ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                         onChange={ev=>setEditingVal(ev.target.value)}
-                        onBlur={()=>{updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');setActiveCell(null);}}
-                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
                         style={{...cellFocus,textAlign:'right',color:accentColor,fontWeight:700}}/>
-                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:e.isInc?700:400,color:e.isInc?accentColor:'#ccc'}}>
-                      {e.isInc?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
+                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:e.isInc&&e.amount>0?700:400,color:e.isInc&&e.amount>0?accentColor:'#ddd'}}>
+                      {e.isInc&&e.amount>0?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
                     </div>}
                 </div>
-                {/* Expense cell for existing entries */}
-                <div style={{...cellBase,background:e.isInc?'rgba(0,0,0,.02)':'inherit'}}
-                  onClick={()=>{
-                    if(e.isInc){
-                      updateEntry(e.id,'type','expense');
-                    }
-                    setActiveCell({rowId:e.id,col:'exp_data'});setEditingVal(!e.isInc?String(e.amount):'');
-                  }}>
+                {/* Expense cell */}
+                <div style={{...cellBase,background:'inherit',cursor:'text'}}
+                  onClick={()=>{setActiveCell({rowId:e.id,col:'exp_data'});setEditingVal(!e.isInc?String(e.amount):'');}}>
                   {activeCell?.rowId===e.id&&activeCell?.col==='exp_data'
                     ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                         onChange={ev=>setEditingVal(ev.target.value)}
-                        onBlur={()=>{updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');setActiveCell(null);}}
-                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
                         style={{...cellFocus,textAlign:'right',color:'#e53935',fontWeight:700}}/>
-                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:!e.isInc?700:400,color:!e.isInc?'#e53935':'#ccc'}}>
-                      {!e.isInc?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
+                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:!e.isInc&&e.amount>0?700:400,color:!e.isInc&&e.amount>0?'#e53935':'#ddd'}}>
+                      {!e.isInc&&e.amount>0?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
                     </div>}
                 </div>
-                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
+                {/* Balance */}
+                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
-                </div>
-                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'center',gap:3,padding:'4px 6px'}}>
-                  <button onClick={()=>openEdit(e)} title="Edit" style={{width:24,height:24,background:accentColor,border:'none',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>✏️</button>
-                  <button onClick={()=>deleteEntry(e.id)} title="Delete" style={{width:24,height:24,background:'#ffebee',border:'1px solid #ef9a9a',color:'#c62828',borderRadius:4,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
                 </div>
               </div>
             );
           })}
 
-          {/* Totals */}
-          {rows.length>0&&(
-            <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
-              <div style={{padding:'7px 8px',gridColumn:'1/4',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL — {rows.length}</div>
-              <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#2e7d32',borderRight:`1px solid ${borderClr}`}}>₱{Number(totInc).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-              <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#c62828',borderRight:`1px solid ${borderClr}`}}>₱{Number(totExp).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-              <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:closingBal>=0?accentDark:'#c62828'}}>₱{Number(Math.abs(closingBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-              <div/>
-            </div>
-          )}
+
 
           {/* Blank entry rows */}
           {blankRows.map((r,i)=>{
@@ -1736,20 +1691,10 @@ function App(){
             return(
               <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:500,background:rowBg}}>
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
-                <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
-                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column',justifyContent:'center',position:'relative'}}>
-                  <div style={{display:'flex',alignItems:'center',borderBottom:'1px dashed rgba(0,0,0,.06)'}}>
-                    <div style={{flex:1}}>
-                      <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',background:'transparent'}}/>
-                    </div>
-                    {hasCat&&!isInc&&!isExp&&(
-                      <div style={{display:'flex',gap:2,padding:'0 4px',flexShrink:0}}>
-                        <button onClick={()=>updateBlank(r._bid,'type','income')} style={{padding:'2px 5px',background:r.type==='income'?'rgba(34,197,94,.3)':'rgba(0,0,0,.05)',border:'1px solid rgba(34,197,94,.4)',borderRadius:3,color:'#22c55e',fontSize:8,fontWeight:700,cursor:'pointer'}}>IN</button>
-                        <button onClick={()=>updateBlank(r._bid,'type','expense')} style={{padding:'2px 5px',background:r.type==='expense'?'rgba(239,68,68,.3)':'rgba(0,0,0,.05)',border:'1px solid rgba(239,68,68,.4)',borderRadius:3,color:'#ef4444',fontSize:8,fontWeight:700,cursor:'pointer'}}>OUT</button>
-                      </div>
-                    )}
-                  </div>
-                  <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10}}/>
+                <div style={{...cellBase,background:'inherit',display:'flex',flexDirection:'column'}}>
+                  <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.04)',background:'transparent',fontSize:10,color:'#888'}}/>
+                  <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px solid rgba(0,0,0,.06)',background:'transparent'}}/>
+                  <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#aaa'}}/>
                 </div>
                 {/* Income column — always editable, disabled if category is expense */}
                 <div style={{...cellBase,background:isExp?'rgba(0,0,0,.02)':'inherit'}}>
@@ -1766,7 +1711,7 @@ function App(){
                   }
                 </div>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic',borderRight:`1px solid ${borderClr}`}}>auto</div>
-                <div style={{...cellBase,background:'inherit',borderRight:'none'}}/>
+
               </div>
             );
           })}

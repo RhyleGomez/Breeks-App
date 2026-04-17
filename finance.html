@@ -1651,12 +1651,45 @@ function App(){
                   <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{borderRight:'none',borderBottom:'1px dashed rgba(0,0,0,.06)',background:'transparent'}}/>
                   <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Description…" style={{borderRight:'none',background:'transparent',fontSize:10,color:'#666'}}/>
                 </div>
-                {e.isInc
-                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color={accentColor} placeholder="—" style={{background:'inherit',textAlign:'right'}}/>
-                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11,borderRight:`1px solid ${borderClr}`}}>—</div>}
-                {!e.isInc
-                  ?<AmountCell rowId={e.id} field="amount" value={e.amount} color="#e53935" placeholder="—" style={{background:'inherit',textAlign:'right'}}/>
-                  :<div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',color:'#ccc',fontSize:11,borderRight:`1px solid ${borderClr}`}}>—</div>}
+                {/* Income cell for existing entries */}
+                <div style={{...cellBase,background:!e.isInc?'rgba(0,0,0,.02)':'inherit'}}
+                  onClick={()=>{
+                    if(!e.isInc){
+                      // Switch to income
+                      updateEntry(e.id,'type','income');
+                      const info=CAT_TYPE[e.category]||{};
+                      if(!info.type)updateEntry(e.id,'type','income');
+                    }
+                    setActiveCell({rowId:e.id,col:'inc_data'});setEditingVal(e.isInc?String(e.amount):'');
+                  }}>
+                  {activeCell?.rowId===e.id&&activeCell?.col==='inc_data'
+                    ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
+                        onChange={ev=>setEditingVal(ev.target.value)}
+                        onBlur={()=>{updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        style={{...cellFocus,textAlign:'right',color:accentColor,fontWeight:700}}/>
+                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:e.isInc?700:400,color:e.isInc?accentColor:'#ccc'}}>
+                      {e.isInc?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
+                    </div>}
+                </div>
+                {/* Expense cell for existing entries */}
+                <div style={{...cellBase,background:e.isInc?'rgba(0,0,0,.02)':'inherit'}}
+                  onClick={()=>{
+                    if(e.isInc){
+                      updateEntry(e.id,'type','expense');
+                    }
+                    setActiveCell({rowId:e.id,col:'exp_data'});setEditingVal(!e.isInc?String(e.amount):'');
+                  }}>
+                  {activeCell?.rowId===e.id&&activeCell?.col==='exp_data'
+                    ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
+                        onChange={ev=>setEditingVal(ev.target.value)}
+                        onBlur={()=>{updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        style={{...cellFocus,textAlign:'right',color:'#e53935',fontWeight:700}}/>
+                    :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:!e.isInc?700:400,color:!e.isInc?'#e53935':'#ccc'}}>
+                      {!e.isInc?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
+                    </div>}
+                </div>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                 </div>

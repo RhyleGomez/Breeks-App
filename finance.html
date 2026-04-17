@@ -1426,6 +1426,7 @@ function App(){
       if(e.id!==id)return e;
       if(field==='category'){const info=CAT_TYPE[val]||{};return{...e,category:val,type:info.type||e.type,group:info.group||e.group};}
       if(field==='amount')return{...e,amount:parseFloat(val)||0};
+      if(field==='type')return{...e,type:val};
       return{...e,[field]:val};
     }));
 
@@ -1606,7 +1607,20 @@ function App(){
               <div style={{fontSize:12,fontWeight:900,color:col}}>{isNum?v:peso(v)}</div>
             </div>
           ))}
-          <div style={{padding:'4px 8px',display:'flex',alignItems:'center'}}>
+          <div style={{padding:'4px 8px',display:'flex',alignItems:'center',gap:6}}>
+            <button onClick={()=>{
+              // Fix entries where type doesn't match CAT_TYPE
+              setEntries(prev=>prev.map(e=>{
+                const info=CAT_TYPE[e.category];
+                if(info&&info.type&&info.type!==e.type){
+                  return{...e,type:info.type,group:info.group||e.group};
+                }
+                return e;
+              }));
+              showBadge();
+            }} style={{padding:'5px 10px',background:'rgba(239,68,68,.1)',border:'1px solid #ef4444',borderRadius:6,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}} title="Fix entries where income/expense type is wrong">
+              🔧 Fix Types
+            </button>
             <button onClick={()=>{
               blankRows.forEach(r=>{
                 if(r.accountId&&r.category&&parseFloat(r.amount)>0)saveBlankRow(r._bid);

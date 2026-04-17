@@ -681,7 +681,7 @@ function App(){
     });
 
     return(
-      <div style={{padding:16,maxWidth:1200,margin:'0 auto',height:'calc(100vh - 100px)',overflowY:'auto'}}>
+      <div style={{padding:16,maxWidth:1200,margin:'0 auto',height:'calc(100vh - 105px)',overflowY:'auto',boxSizing:'border-box'}}>
 
         {/* Budget alerts */}
         {overBudgets.length>0&&(
@@ -1620,7 +1620,7 @@ function App(){
 
 
         {/* Journal table */}
-        <div style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0}}>
+        <div style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
             {['Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(
@@ -1742,7 +1742,7 @@ function App(){
     ];
     const active=TABS.find(t=>t.key===activeTab);
     return(
-      <div style={{height:'calc(100vh - 52px)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{height:'calc(100vh - 105px)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Tab switcher */}
         <div style={{display:'flex',alignItems:'stretch',background:'#0a0820',borderBottom:`2px solid ${active.color}`,flexShrink:0}}>
           {TABS.map(tab=>{

@@ -1494,8 +1494,8 @@ function App(){
         <div style={{flex:1,overflow:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:550,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['#','Date','Account','Category','Note / Description','Income','Expense','Balance'].map((h,i)=>(
-              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+            {['#','Date','Account','Category','Note / Description','Income','Expense','Balance',''].map((h,i)=>(
+              <div key={i} style={{padding:'7px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=5&&i<8?'right':'center',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
@@ -1509,6 +1509,7 @@ function App(){
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:accentDark,borderRight:`1px solid ${borderClr}`}}>₱{Number(openingBal).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+            <div style={{padding:'6px 8px'}}/>
 
           </div>
 
@@ -1533,9 +1534,9 @@ function App(){
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontWeight:900,fontSize:11,color:e.runBal>=0?'#1a1a1a':'#c62828'}}>
                   ₱{Number(Math.abs(e.runBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                 </div>
-                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'center',gap:2,padding:'3px 4px'}}>
-                  <button onClick={()=>openEdit(e)} style={{flex:1,padding:'3px 0',background:accentLight,border:`1px solid ${accentColor}`,color:accentDark,borderRadius:3,cursor:'pointer',fontSize:9}}>✏️</button>
-                  <button onClick={()=>deleteEntry(e.id)} style={{flex:1,padding:'3px 0',background:'#ffebee',border:'1px solid #ef9a9a',color:'#c62828',borderRadius:3,cursor:'pointer',fontSize:9}}>🗑</button>
+                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'center',gap:3,padding:'4px 6px'}}>
+                  <button onClick={()=>openEdit(e)} title="Edit" style={{width:24,height:24,background:accentColor,border:'none',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>✏️</button>
+                  <button onClick={()=>deleteEntry(e.id)} title="Delete" style={{width:24,height:24,background:'#ffebee',border:'1px solid #ef9a9a',color:'#c62828',borderRadius:4,cursor:'pointer',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>🗑</button>
                 </div>
               </div>
             );
@@ -1544,7 +1545,7 @@ function App(){
           {/* Totals */}
           {rows.length>0&&(
             <div style={{display:'grid',gridTemplateColumns:COL,minWidth:600,background:accentLight,borderTop:`2px solid ${accentColor}`,position:'sticky',bottom:0}}>
-              <div style={{padding:'7px 8px',gridColumn:'1/6',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL</div>
+              <div style={{padding:'7px 8px',gridColumn:'1/6',textAlign:'right',fontWeight:800,fontSize:10,color:accentDark,borderRight:`1px solid ${borderClr}`}}>TOTAL — {rows.length}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#2e7d32',borderRight:`1px solid ${borderClr}`}}>₱{Number(totInc).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:'#c62828',borderRight:`1px solid ${borderClr}`}}>₱{Number(totExp).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
               <div style={{padding:'7px 8px',textAlign:'right',fontWeight:900,fontSize:12,color:closingBal>=0?accentDark:'#c62828'}}>₱{Number(Math.abs(closingBal)).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
@@ -1582,7 +1583,8 @@ function App(){
                   {(!hasCat||isExp)?<AmountCell rowId={r._bid} field="amount" value={hasCat&&isExp?parseFloat(r.amount)||0:0} color="#e53935" placeholder={hasCat&&isInc?'—':'0.00'} style={{background:'transparent',border:'none'}}/>
                   :<div style={{padding:'6px 8px',color:'#ddd',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>}
                 </div>
-                <div style={{...cellBase,background:'inherit',borderRight:'none',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic'}}>auto</div>
+                <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic',borderRight:`1px solid ${borderClr}`}}>auto</div>
+                <div style={{...cellBase,background:'inherit',borderRight:'none'}}/>
               </div>
             );
           })}

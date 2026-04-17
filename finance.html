@@ -425,12 +425,65 @@ function App(){
     return()=>clearInterval(iv);
   },[locked,driveStatus]);
 
+  // Auto-connect Drive on startup if Client ID and token already saved
+  useEffect(()=>{
+    if(locked)return;
+    const cid=localStorage.getItem('fin2_client_id');
+    const token=GDrive.getToken();
+    if(cid&&token){
+      // Token exists — try to load data silently
+      setDriveStatus('syncing');setDriveMsg('Auto-syncing…');
+      GDrive.loadData(token).then(result=>{
+        if(result.ok){
+          const ts=new Date().toLocaleString('en-PH');
+          setLastSync(ts);localStorage.setItem('fin2_last_sync',ts);
+          setDriveStatus('synced');setDriveMsg('Drive Synced ✅');
+        } else {
+          // File not found yet — save current data
+          GDrive.saveData(token).then(ok=>{
+            if(ok){
+              const ts=new Date().toLocaleString('en-PH');
+              setLastSync(ts);localStorage.setItem('fin2_last_sync',ts);
+              setDriveStatus('synced');setDriveMsg('Drive Synced ✅');
+            }
+          });
+        }
+      }).catch(e=>{
+        if(e.message==='TOKEN_EXPIRED'){
+          // Token expired — try silent re-auth
+          GDrive.clearToken();
+          setDriveStatus('idle');setDriveMsg('Session expired — tap to reconnect');
+        } else {
+          setDriveStatus('error');setDriveMsg('Auto-sync failed');
+        }
+      });
+    } else if(cid&&!token){
+      // Has Client ID but no token — try silent sign in
+      setDriveStatus('connecting');setDriveMsg('Connecting…');
+      driveSignIn().catch(()=>{
+        setDriveStatus('idle');setDriveMsg('Tap to connect Drive');
+      });
+    }
+  },[locked]);
+
   const[entries,setEntries]=useLS('fin2_entries',[]);
   const[accounts,setAccounts]=useLS('fin2_accounts',DEFAULT_ACCOUNTS);
   const[customCats,setCustomCats]=useLS('fin2_custom_cats',{bizInc:[],bizExp:[],perInc:[],perExp:[]});
   const[budgets,setBudgets]=useLS('fin2_budgets',[]);
   const[liabilities,setLiabilities]=useLS('fin2_liabilities',[]);
   const[company,setCompany]=useLS('fin2_company',{name:'BREEKS',tagline:'Digital Marketing Services'});
+
+  // Auto-save to Drive 3 seconds after any data change
+  const driveAutoSaveTimer=useRef(null);
+  useEffect(()=>{
+    if(locked||!GDrive.getToken())return;
+    if(driveAutoSaveTimer.current)clearTimeout(driveAutoSaveTimer.current);
+    driveAutoSaveTimer.current=setTimeout(()=>{
+      if(GDrive.getToken())driveSave();
+    },3000);
+    return()=>{if(driveAutoSaveTimer.current)clearTimeout(driveAutoSaveTimer.current);};
+  },[entries,accounts,budgets,liabilities]);
+
   const[view,setView]=useState('dashboard');
   const[dashTab,setDashTab]=useState('business');
   const[showAdd,setShowAdd]=useState(false);
@@ -1047,9 +1100,9 @@ function App(){
                   const val=e.target.value;
                   if(rowId.startsWith('b'))updateBlank(rowId,field,val);
                   else updateEntry(rowId,field,val);
-                  setActiveCell(null);
+                  setTimeout(()=>setActiveCell(null),0);
                 }}
-                onBlur={()=>setActiveCell(null)}
+                onBlur={()=>{setTimeout(()=>setActiveCell(null),150);}}
                 style={{...cellFocus,cursor:'pointer'}}>
                 <option value="">{placeholder}</option>
                 {options}
@@ -1316,7 +1369,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='28px 78px 108px 108px 1fr 100px 100px 100px 60px';
+    const COL='28px 78px 145px 120px 1fr 100px 100px 100px 60px';
 
     const BLANK_ROWS=6;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1402,8 +1455,18 @@ function App(){
       return(
         <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
           {isActive
-            ?<select autoFocus value={value||''} onChange={e=>{rowId.startsWith(group+'_b')?updateBlank(rowId,field,e.target.value):updateEntry(rowId,field,e.target.value);setActiveCell(null);}}
-                onBlur={()=>setActiveCell(null)} style={{...cellFocus,cursor:'pointer'}}>
+            ?<select autoFocus value={value||''}
+                onChange={e=>{
+                  const val=e.target.value;
+                  if(rowId.startsWith(group+'_b'))updateBlank(rowId,field,val);
+                  else updateEntry(rowId,field,val);
+                  setTimeout(()=>setActiveCell(null),0);
+                }}
+                onBlur={e=>{
+                  // Only close if not changing value (prevents tab switch on select)
+                  setTimeout(()=>setActiveCell(null),150);
+                }}
+                style={{...cellFocus,cursor:'pointer'}}>
                 <option value="">{placeholder}</option>{options}
               </select>
             :<div style={{padding:'6px 8px',fontSize:11,color:value?'#1a1a1a':'#bbb',fontStyle:value?'normal':'italic',display:'flex',alignItems:'center',minHeight:36,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value||placeholder}</div>}

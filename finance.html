@@ -502,6 +502,11 @@ function App(){
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
   const[projects,setProjects]=useLS('fin2_projects',[]);
+  const[showProjForm,setShowProjForm]=React.useState(false);
+  const[editProjId,setEditProjId]=React.useState(null);
+  const[projForm,setProjForm]=React.useState({name:'',client:'',type:'Signage',status:'Active',salePrice:0,date:'',notes:'',items:[]});
+  const projItemCounter=React.useRef(0);
+  const newProjItem=()=>({id:'item_'+(++projItemCounter.current),desc:'',qty:1,unit:'pcs',unitCost:0,category:'Material'});
   const[dashTab,setDashTab]=useState('business');
   const[showAdd,setShowAdd]=useState(false);
   const[editEntry,setEditEntry]=useState(null);
@@ -2960,33 +2965,27 @@ function App(){
 
   // ── PROJECTS VIEW ────────────────────────────────────────────────────────
   const ProjectsView=()=>{
-    const emptyProject=()=>({
-      id:'proj_'+Date.now(),
-      name:'',client:'',type:'Signage',status:'Active',
-      salePrice:0,date:today(),notes:'',
-      items:[]
-    });
-    const itemCounter=React.useRef(0);
-    const emptyItem=()=>({id:'item_'+(++itemCounter.current),desc:'',qty:1,unit:'pcs',unitCost:0,category:'Material'});
-
-    const[showForm,setShowForm]=React.useState(false);
-    const[editProj,setEditProj]=React.useState(null);
-    const[form,setForm]=React.useState(emptyProject());
     const[filter,setFilter]=React.useState('All');
+    // Use App-level state to prevent form reset on re-render
+    const form=projForm;
+    const setForm=setProjForm;
+    const showForm=showProjForm;
+    const setShowForm=setShowProjForm;
+    const editProj=editProjId;
 
-    const openNew=()=>{setForm(emptyProject());setEditProj(null);setShowForm(true);};
-    const openEdit=(p)=>{setForm({...p,items:[...p.items.map(i=>({...i}))]});setEditProj(p.id);setShowForm(true);};
+    const openNew=()=>{setProjForm({name:'',client:'',type:'Signage',status:'Active',salePrice:0,date:today(),notes:'',items:[]});setEditProjId(null);setShowProjForm(true);};
+    const openEdit=(p)=>{setProjForm({...p,items:p.items.map(i=>({...i}))});setEditProjId(p.id);setShowProjForm(true);};
     const saveProject=()=>{
-      if(!form.name)return;
-      if(editProj)setProjects(prev=>prev.map(p=>p.id===editProj?{...form}:p));
-      else setProjects(prev=>[...prev,{...form,id:'proj_'+Date.now()}]);
-      setShowForm(false);showBadge();
+      if(!projForm.name)return;
+      if(editProjId)setProjects(prev=>prev.map(p=>p.id===editProjId?{...projForm}:p));
+      else setProjects(prev=>[...prev,{...projForm,id:'proj_'+Date.now()}]);
+      setShowProjForm(false);showBadge();
     };
     const deleteProject=(id)=>{if(window.confirm('Delete this project?'))setProjects(prev=>prev.filter(p=>p.id!==id));};
 
-    const addItem=()=>setForm(f=>({...f,items:[...f.items,emptyItem()]}));
-    const updateItem=(idx,field,val)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,[field]:field==='qty'||field==='unitCost'?parseFloat(val)||0:val}:it)}));
-    const removeItem=(idx)=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
+    const addItem=()=>setProjForm(f=>({...f,items:[...f.items,newProjItem()]}));
+    const updateItem=(idx,field,val)=>setProjForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,[field]:field==='qty'||field==='unitCost'?parseFloat(val)||0:val}:it)}));
+    const removeItem=(idx)=>setProjForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
 
     const totalCost=(p)=>p.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.unitCost)||0),0);
     const margin=(p)=>{const sale=parseFloat(p.salePrice)||0;const cost=totalCost(p);return sale>0?((sale-cost)/sale*100):0;};

@@ -1389,13 +1389,17 @@ function App(){
     const[editingVal,setEditingVal]=useState('');
 
 
-    // Entries for this group only
+    // Entries for this group only — sorted by creation order
     const groupEntries=useMemo(()=>[...entries]
       .filter(e=>{const info=CAT_TYPE[e.category]||{};return(info.group||e.group)===group;})
       .sort((a,b)=>{
-        const so=(x)=>x.sortOrder!==undefined?x.sortOrder:999999;
-        if(so(a)!==so(b))return so(a)-so(b);
-        return a.date.localeCompare(b.date)||a.id.localeCompare(b.id);
+        // Use id (timestamp-based) for stable creation order
+        const getTs=(e)=>{
+          if(e.sortOrder!==undefined)return e.sortOrder;
+          const m=e.id&&e.id.match(/e_(\d+)/);
+          return m?parseInt(m[1]):0;
+        };
+        return getTs(a)-getTs(b);
       })
     ,[entries,group]);
 

@@ -1379,7 +1379,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='130px 160px 1fr 110px 110px 120px 30px';
+    const COL='80px 110px 130px 1fr 95px 95px 100px 28px';
 
     const BLANK_ROWS=1;
     const[blankRows,setBlankRows]=useState(()=>
@@ -1622,14 +1622,15 @@ function App(){
         {/* Journal table */}
         <div style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff'}}>
           {/* Header */}
-          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:760,background:accentColor,position:'sticky',top:0,zIndex:5}}>
-            {['Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(
-              <div key={i} style={{padding:'9px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=3&&i<=5?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
+          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:accentColor,position:'sticky',top:0,zIndex:5}}>
+            {['Date','Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(
+              <div key={i} style={{padding:'9px 8px',fontSize:9,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:.4,borderRight:'1px solid rgba(255,255,255,.2)',textAlign:i>=4&&i<=6?'right':'left',whiteSpace:'nowrap'}}>{h}</div>
             ))}
           </div>
 
           {/* Opening row */}
-          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:760,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
+          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:accentLight,borderBottom:`1px solid ${borderClr}`}}>
+            <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
             <div style={{padding:'6px 8px',fontSize:10,fontWeight:700,color:accentDark,borderRight:`1px solid ${borderClr}`}}>Opening Balance</div>
             <div style={{padding:'6px 8px',borderRight:`1px solid ${borderClr}`}}/>
@@ -1645,11 +1646,12 @@ function App(){
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
               <div key={e.id}
-                style={{display:'grid',gridTemplateColumns:COL,minWidth:760,background:rowBg,transition:'background .1s'}}
+                style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg,transition:'background .1s'}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
 
-                <SelectCell rowId={e.id} field="accountId" value={accounts.find(a=>a.id===e.accountId)?.name||''} placeholder="Account…" options={accOpts} style={{background:'inherit',borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}/>
+                <TextCell rowId={e.id} field="date" value={e.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:`3px solid ${e.isInc?accentColor:'#ef5350'}`}}/>
+                <SelectCell rowId={e.id} field="accountId" value={accounts.find(a=>a.id===e.accountId)?.name||''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
                 <SelectCell rowId={e.id} field="category" value={e.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
                 <TextCell rowId={e.id} field="note" value={e.note||''} placeholder="Description…" style={{background:'inherit',fontSize:10,color:'#888'}}/>
                 {/* Income cell */}
@@ -1702,9 +1704,10 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:760,background:rowBg}}>
+              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
 
-                <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit',borderLeft:'3px solid #e0e0e0'}}/>
+                <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:'3px solid #e0e0e0'}}/>
+                <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
                 <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
                 <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{background:'inherit',fontSize:10,color:'#888'}}/>
                 {/* Income column — always editable, disabled if category is expense */}

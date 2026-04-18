@@ -1426,16 +1426,25 @@ function App(){
       return updated;
     });
 
-    const saveBlankRow=(bid)=>{
-      const r=blankRows.find(x=>x._bid===bid);
-      if(!r||!r.accountId||!r.category||!r.amount||parseFloat(r.amount)<=0)return;
-      const info=CAT_TYPE[r.category]||{};
-      const grpCount=entries.filter(en=>{const inf=CAT_TYPE[en.category]||{};return(inf.group||en.group)===group;}).length;
-      const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),amount:parseFloat(r.amount),type:info.type||r.type||'expense',group:info.group||r.group||group,sortOrder:grpCount*10+10};
-      delete e._bid;
-      setEntries(p=>[...p,e]);
-      setBlankRows(prev=>prev.filter(x=>x._bid!==bid));
-      showBadge();
+    const saveBlankRow=(bid,overrideAmount,overrideType)=>{
+      setBlankRows(prev=>{
+        const r=prev.find(x=>x._bid===bid);
+        const amt=parseFloat(overrideAmount||r?.amount||0);
+        if(!r||amt<=0)return prev;
+        const typ=overrideType||r.type||'expense';
+        const info=CAT_TYPE[r.category]||{};
+        const grpCount=entries.filter(en=>{const inf=CAT_TYPE[en.category]||{};return(inf.group||en.group)===group;}).length;
+        const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+          amount:amt,type:info.type||typ,group:info.group||r.group||group,
+          sortOrder:grpCount*10+10};
+        delete e._bid;
+        setTimeout(()=>setEntries(p=>[...p,e]),0);
+        setTimeout(()=>showBadge(),50);
+        // Reset this row to blank
+        return prev.map(x=>x._bid===bid
+          ?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}
+          :x);
+      });
     };
 
     const updateEntry=(id,field,val)=>setEntries(prev=>prev.map(e=>{
@@ -1530,19 +1539,19 @@ function App(){
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                 onChange={e=>setEditingVal(e.target.value)}
                 onBlur={()=>{
-                  const r=blankRows.find(x=>x._bid===rowId);
-                  if(r){
+                  if(parseFloat(editingVal)>0){
                     updateBlank(rowId,'amount',editingVal);
                     updateBlank(rowId,'type','income');
-                    if(r.accountId&&r.category&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
-                    else if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
+                    setTimeout(()=>saveBlankRow(rowId,editingVal,'income'),50);
                   }
                   setActiveCell(null);
                 }}
                 onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
-                  const r=blankRows.find(x=>x._bid===rowId);
-                  if(r){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','income');
-                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);}
+                  if(parseFloat(editingVal)>0){
+                    updateBlank(rowId,'amount',editingVal);
+                    updateBlank(rowId,'type','income');
+                    setTimeout(()=>saveBlankRow(rowId,editingVal,'income'),50);
+                  }
                   setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
@@ -1560,18 +1569,19 @@ function App(){
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                 onChange={e=>setEditingVal(e.target.value)}
                 onBlur={()=>{
-                  const r=blankRows.find(x=>x._bid===rowId);
-                  if(r){
+                  if(parseFloat(editingVal)>0){
                     updateBlank(rowId,'amount',editingVal);
                     updateBlank(rowId,'type','expense');
-                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
+                    setTimeout(()=>saveBlankRow(rowId,editingVal,'expense'),50);
                   }
                   setActiveCell(null);
                 }}
                 onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
-                  const r=blankRows.find(x=>x._bid===rowId);
-                  if(r){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','expense');
-                    if(r.accountId&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);}
+                  if(parseFloat(editingVal)>0){
+                    updateBlank(rowId,'amount',editingVal);
+                    updateBlank(rowId,'type','expense');
+                    setTimeout(()=>saveBlankRow(rowId,editingVal,'expense'),50);
+                  }
                   setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}

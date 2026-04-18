@@ -1389,15 +1389,17 @@ function App(){
     const[editingVal,setEditingVal]=useState('');
 
 
-    // Entries for this group only — sorted by creation order
+    // Entries for this group only — sorted by date, then creation order
     const groupEntries=useMemo(()=>[...entries]
       .filter(e=>{const info=CAT_TYPE[e.category]||{};return(info.group||e.group)===group;})
       .sort((a,b)=>{
-        // Use id (timestamp-based) for stable creation order
+        // Sort by date first
+        const dateCmp=a.date.localeCompare(b.date);
+        if(dateCmp!==0)return dateCmp;
+        // Same date — use creation timestamp from id
         const getTs=(e)=>{
-          if(e.sortOrder!==undefined)return e.sortOrder;
-          const m=e.id&&e.id.match(/e_(\d+)/);
-          return m?parseInt(m[1]):0;
+          const parts=e.id&&e.id.split('_');
+          return parts&&parts[1]?parseInt(parts[1]):0;
         };
         return getTs(a)-getTs(b);
       })

@@ -3129,13 +3129,15 @@ function App(){
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
                 <div>
                   <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Project Name *</div>
-                  <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
+                  <input defaultValue={form.name} onBlur={e=>setForm(f=>({...f,name:e.target.value}))}
+                    onKeyDown={e=>{if(e.key==='Tab')setForm(f=>({...f,name:e.target.value}));}}
                     placeholder="e.g. SM Signage - May 2026"
                     style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
                 </div>
                 <div>
                   <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Client</div>
-                  <input value={form.client} onChange={e=>setForm(f=>({...f,client:e.target.value}))}
+                  <input defaultValue={form.client} onBlur={e=>setForm(f=>({...f,client:e.target.value}))}
+                    onKeyDown={e=>{if(e.key==='Tab')setForm(f=>({...f,client:e.target.value}));}}
                     placeholder="Client name"
                     style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
                 </div>
@@ -3168,7 +3170,7 @@ function App(){
 
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Notes</div>
-                <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
+                <input defaultValue={form.notes} onBlur={e=>setForm(f=>({...f,notes:e.target.value}))}
                   placeholder="Additional notes..."
                   style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
               </div>
@@ -3194,21 +3196,27 @@ function App(){
 
                 {form.items.map((it,idx)=>(
                   <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 80px 24px',gap:6,marginBottom:6,alignItems:'center'}}>
-                    <input value={it.desc} onChange={e=>updateItem(idx,'desc',e.target.value)}
+                    <input defaultValue={it.desc}
+                      onBlur={e=>updateItem(idx,'desc',e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Tab'||e.key==='Enter')updateItem(idx,'desc',e.target.value);}}
                       placeholder="e.g. Tarpaulin 4x8"
-                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                    <input type="number" value={it.qty||''} onChange={e=>updateItem(idx,'qty',e.target.value)}
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'}}/>
+                    <input type="number" defaultValue={it.qty||''}
+                      onBlur={e=>updateItem(idx,'qty',e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Tab'||e.key==='Enter')updateItem(idx,'qty',e.target.value);}}
                       placeholder="1"
-                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'}}/>
                     <select value={it.unit} onChange={e=>updateItem(idx,'unit',e.target.value)}
-                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',width:'100%'}}>
                       {['pcs','sqm','sqft','meters','rolls','hrs','days','set','lot'].map(u=><option key={u} value={u}>{u}</option>)}
                     </select>
-                    <input type="number" value={it.unitCost||''} onChange={e=>updateItem(idx,'unitCost',e.target.value)}
+                    <input type="number" defaultValue={it.unitCost||''}
+                      onBlur={e=>updateItem(idx,'unitCost',e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Tab'||e.key==='Enter')updateItem(idx,'unitCost',e.target.value);}}
                       placeholder="0.00"
-                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'}}/>
                     <select value={it.category} onChange={e=>updateItem(idx,'category',e.target.value)}
-                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',width:'100%'}}>
                       {ITEM_CATS.map(cat=><option key={cat} value={cat}>{cat}</option>)}
                     </select>
                     <div style={{padding:'6px 4px',fontSize:11,fontWeight:700,color:'#00c4d4',textAlign:'right'}}>

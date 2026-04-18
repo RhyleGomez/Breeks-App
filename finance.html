@@ -1479,24 +1479,64 @@ function App(){
 
     const SelectCell=({rowId,field,value,options,placeholder,style={}})=>{
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
+      const[search,setSearch]=React.useState('');
+
+      // Extract flat list of options from optgroup JSX for filtering
+      const flatOpts=React.useMemo(()=>{
+        const list=[];
+        const extract=(node)=>{
+          if(!node)return;
+          if(Array.isArray(node)){node.forEach(extract);return;}
+          if(node.type==='option')list.push({label:node.props.children,value:node.props.value});
+          if(node.props&&node.props.children)extract(node.props.children);
+        };
+        extract(options);
+        return list;
+      },[options]);
+
+      const filtered=search
+        ?flatOpts.filter(o=>o.label.toLowerCase().includes(search.toLowerCase()))
+        :flatOpts;
+
+      const handleSelect=(val)=>{
+        if(rowId.startsWith(group+'_b'))updateBlank(rowId,field,val);
+        else updateEntry(rowId,field,val);
+        setSearch('');
+        setTimeout(()=>setActiveCell(null),0);
+      };
+
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
-          {isActive
-            ?<select autoFocus value={value||''}
-                onChange={e=>{
-                  const val=e.target.value;
-                  if(rowId.startsWith(group+'_b'))updateBlank(rowId,field,val);
-                  else updateEntry(rowId,field,val);
-                  setTimeout(()=>setActiveCell(null),0);
+        <div style={{...cellBase,...style,position:'relative'}}
+          onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setSearch('');}}}>
+          {isActive?(
+            <div style={{position:'absolute',top:0,left:0,right:0,zIndex:50,background:'#fff',border:'2px solid #fbc02d',borderRadius:4,boxShadow:'0 4px 16px rgba(0,0,0,.15)',minWidth:180}}>
+              <input autoFocus value={search}
+                onChange={e=>setSearch(e.target.value)}
+                onKeyDown={e=>{
+                  if(e.key==='Escape'){setSearch('');setActiveCell(null);}
+                  if(e.key==='Enter'&&filtered.length>0){handleSelect(filtered[0].value);}
+                  if(e.key==='Tab'){e.preventDefault();if(filtered.length>0)handleSelect(filtered[0].value);}
                 }}
-                onBlur={e=>{
-                  // Only close if not changing value (prevents tab switch on select)
-                  setTimeout(()=>setActiveCell(null),150);
-                }}
-                style={{...cellFocus,cursor:'pointer'}}>
-                <option value="">{placeholder}</option>{options}
-              </select>
-            :<div style={{padding:'6px 8px',fontSize:11,color:value?'#1a1a1a':'#bbb',fontStyle:value?'normal':'italic',display:'flex',alignItems:'center',minHeight:36,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value||placeholder}</div>}
+                placeholder={`Search ${placeholder}...`}
+                style={{width:'100%',padding:'6px 8px',border:'none',borderBottom:'1px solid #e0e0e0',outline:'none',fontSize:11,boxSizing:'border-box',fontFamily:'inherit'}}/>
+              <div style={{maxHeight:160,overflowY:'auto'}}>
+                {filtered.length===0
+                  ?<div style={{padding:'8px',fontSize:11,color:'#aaa',fontStyle:'italic'}}>No matches</div>
+                  :filtered.map(o=>(
+                    <div key={o.value} onClick={()=>handleSelect(o.value)}
+                      style={{padding:'6px 10px',fontSize:11,cursor:'pointer',color:'#1a1a1a',borderBottom:'1px solid #f5f5f5'}}
+                      onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
+                      onMouseLeave={ev=>ev.currentTarget.style.background='#fff'}>
+                      {o.label}
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          ):null}
+          <div style={{padding:'6px 8px',fontSize:11,color:value?'#1a1a1a':'#bbb',fontStyle:value?'normal':'italic',display:'flex',alignItems:'center',minHeight:36,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {value||placeholder}
+          </div>
         </div>
       );
     };

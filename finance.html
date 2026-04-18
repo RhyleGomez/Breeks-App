@@ -3184,15 +3184,15 @@ function App(){
 
                 {/* Items header */}
                 {form.items.length>0&&(
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 24px',gap:6,marginBottom:6,padding:'0 4px'}}>
-                    {['Description','Qty','Unit','Unit Cost','Category',''].map(h=>(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 80px 24px',gap:6,marginBottom:6,padding:'0 4px'}}>
+                    {['Description','Qty','Unit','Unit Cost','Category','Total',''].map(h=>(
                       <div key={h} style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{h}</div>
                     ))}
                   </div>
                 )}
 
                 {form.items.map((it,idx)=>(
-                  <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 24px',gap:6,marginBottom:6,alignItems:'center'}}>
+                  <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 80px 24px',gap:6,marginBottom:6,alignItems:'center'}}>
                     <input value={it.desc} onChange={e=>updateItem(idx,'desc',e.target.value)}
                       placeholder="e.g. Tarpaulin 4x8"
                       style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
@@ -3210,6 +3210,9 @@ function App(){
                       style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
                       {ITEM_CATS.map(cat=><option key={cat} value={cat}>{cat}</option>)}
                     </select>
+                    <div style={{padding:'6px 4px',fontSize:11,fontWeight:700,color:'#00c4d4',textAlign:'right'}}>
+                      {peso((it.qty||0)*(it.unitCost||0))}
+                    </div>
                     <button onClick={()=>removeItem(idx)}
                       style={{width:24,height:24,background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.3)',borderRadius:4,color:'#ef4444',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>×</button>
                   </div>

@@ -501,6 +501,7 @@ function App(){
 
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
+  const[projects,setProjects]=useLS('fin2_projects',[]);
   const[dashTab,setDashTab]=useState('business');
   const[showAdd,setShowAdd]=useState(false);
   const[editEntry,setEditEntry]=useState(null);
@@ -2956,6 +2957,310 @@ function App(){
 
   // ── MAIN RENDER ─────────────────────────────────────────────────────────────
   if(locked) return <LockScreen onUnlock={()=>setLocked(false)}/>;
+
+  // ── PROJECTS VIEW ────────────────────────────────────────────────────────
+  const ProjectsView=()=>{
+    const emptyProject=()=>({
+      id:'proj_'+Date.now(),
+      name:'',client:'',type:'Signage',status:'Active',
+      salePrice:0,date:today(),notes:'',
+      items:[]
+    });
+    const emptyItem=()=>({id:'item_'+Date.now(),desc:'',qty:1,unit:'pcs',unitCost:0,category:'Material'});
+
+    const[showForm,setShowForm]=React.useState(false);
+    const[editProj,setEditProj]=React.useState(null);
+    const[form,setForm]=React.useState(emptyProject());
+    const[filter,setFilter]=React.useState('All');
+
+    const openNew=()=>{setForm(emptyProject());setEditProj(null);setShowForm(true);};
+    const openEdit=(p)=>{setForm({...p,items:[...p.items.map(i=>({...i}))]});setEditProj(p.id);setShowForm(true);};
+    const saveProject=()=>{
+      if(!form.name)return;
+      if(editProj)setProjects(prev=>prev.map(p=>p.id===editProj?{...form}:p));
+      else setProjects(prev=>[...prev,{...form,id:'proj_'+Date.now()}]);
+      setShowForm(false);showBadge();
+    };
+    const deleteProject=(id)=>{if(window.confirm('Delete this project?'))setProjects(prev=>prev.filter(p=>p.id!==id));};
+
+    const addItem=()=>setForm(f=>({...f,items:[...f.items,emptyItem()]}));
+    const updateItem=(idx,field,val)=>setForm(f=>({...f,items:f.items.map((it,i)=>i===idx?{...it,[field]:field==='qty'||field==='unitCost'?parseFloat(val)||0:val}:it)}));
+    const removeItem=(idx)=>setForm(f=>({...f,items:f.items.filter((_,i)=>i!==idx)}));
+
+    const totalCost=(p)=>p.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.unitCost)||0),0);
+    const margin=(p)=>{const sale=parseFloat(p.salePrice)||0;const cost=totalCost(p);return sale>0?((sale-cost)/sale*100):0;};
+    const profit=(p)=>(parseFloat(p.salePrice)||0)-totalCost(p);
+
+    const TYPES=['Signage','Tarpaulin','Sticker','LED Box','Acrylic','T-shirt','Streamer','Other'];
+    const STATUSES=['Active','Completed','Cancelled'];
+    const ITEM_CATS=['Material','Labor','Freight','Other'];
+
+    const filtered=filter==='All'?projects:projects.filter(p=>p.status===filter);
+
+    const statusColor=(s)=>s==='Completed'?'#22c55e':s==='Cancelled'?'#ef4444':'#f59e0b';
+
+    return(
+      <div style={{padding:16,height:'calc(100vh - 105px)',overflowY:'auto',boxSizing:'border-box'}}>
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:900,color:'#f1f5f9'}}>📐 Project Costing</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Track materials, labor and margin per project</div>
+          </div>
+          <button onClick={openNew}
+            style={{padding:'8px 18px',background:'var(--cyan)',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13}}>
+            ＋ New Project
+          </button>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{display:'flex',gap:8,marginBottom:16}}>
+          {['All','Active','Completed','Cancelled'].map(s=>(
+            <button key={s} onClick={()=>setFilter(s)}
+              style={{padding:'5px 14px',border:`1px solid ${filter===s?'var(--cyan)':'var(--border)'}`,borderRadius:20,
+                background:filter===s?'rgba(0,196,212,.12)':'transparent',
+                color:filter===s?'var(--cyan)':'var(--muted)',fontWeight:filter===s?700:500,
+                cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Summary cards */}
+        {projects.length>0&&(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16}}>
+            {[
+              ['Total Projects',projects.length,'#64748b','📐'],
+              ['Active',projects.filter(p=>p.status==='Active').length,'#f59e0b','⚡'],
+              ['Completed',projects.filter(p=>p.status==='Completed').length,'#22c55e','✅'],
+              ['Total Revenue',peso(projects.filter(p=>p.status==='Completed').reduce((s,p)=>s+(parseFloat(p.salePrice)||0),0)),'#00c4d4','💰'],
+            ].map(([l,v,color,ic])=>(
+              <div key={l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+                <div style={{fontSize:18,marginBottom:4}}>{ic}</div>
+                <div style={{fontSize:11,color:'var(--muted)',marginBottom:2}}>{l}</div>
+                <div style={{fontSize:17,fontWeight:900,color}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Projects list */}
+        {filtered.length===0?(
+          <div style={{textAlign:'center',padding:'60px 20px',color:'var(--muted)'}}>
+            <div style={{fontSize:40,marginBottom:12}}>📐</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No projects yet</div>
+            <div style={{fontSize:12}}>Click ＋ New Project to start tracking your first job</div>
+          </div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {filtered.map(p=>{
+              const cost=totalCost(p);
+              const sale=parseFloat(p.salePrice)||0;
+              const prof=profit(p);
+              const mgn=margin(p);
+              const isProfit=prof>=0;
+              return(
+                <div key={p.id} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
+                  {/* Project header */}
+                  <div style={{padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',borderBottom:'1px solid var(--border)'}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <span style={{fontSize:14,fontWeight:900,color:'#f1f5f9'}}>{p.name}</span>
+                        <span style={{fontSize:9,padding:'2px 8px',borderRadius:10,background:`${statusColor(p.status)}22`,color:statusColor(p.status),fontWeight:700}}>{p.status}</span>
+                        <span style={{fontSize:9,padding:'2px 8px',borderRadius:10,background:'rgba(100,116,139,.15)',color:'#94a3b8',fontWeight:600}}>{p.type}</span>
+                      </div>
+                      {p.client&&<div style={{fontSize:11,color:'var(--muted)'}}>👤 {p.client}</div>}
+                      {p.notes&&<div style={{fontSize:10,color:'#475569',marginTop:3,fontStyle:'italic'}}>{p.notes}</div>}
+                    </div>
+                    <div style={{display:'flex',gap:6,marginLeft:12}}>
+                      <button onClick={()=>openEdit(p)} style={{padding:'5px 12px',background:'rgba(0,196,212,.1)',border:'1px solid var(--cyan)',borderRadius:6,color:'var(--cyan)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>✏️ Edit</button>
+                      <button onClick={()=>deleteProject(p.id)} style={{padding:'5px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>🗑</button>
+                    </div>
+                  </div>
+                  {/* Financial summary */}
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:0,borderBottom:'1px solid var(--border)'}}>
+                    {[
+                      ['Sale Price',peso(sale),'#f1f5f9'],
+                      ['Total Cost',peso(cost),'#ef4444'],
+                      ['Profit / Loss',peso(prof),isProfit?'#22c55e':'#ef4444'],
+                      ['Margin',mgn.toFixed(1)+'%',isProfit?'#22c55e':'#ef4444'],
+                    ].map(([l,v,color],i)=>(
+                      <div key={l} style={{padding:'10px 14px',borderRight:i<3?'1px solid var(--border)':'none'}}>
+                        <div style={{fontSize:9,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:3}}>{l}</div>
+                        <div style={{fontSize:15,fontWeight:900,color}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Items breakdown */}
+                  {p.items.length>0&&(
+                    <div style={{padding:'10px 16px'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>Cost Breakdown</div>
+                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        {p.items.map((it,i)=>(
+                          <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 60px 80px 60px 90px',gap:8,alignItems:'center',fontSize:11}}>
+                            <span style={{color:'#cbd5e1'}}>{it.desc||'—'}</span>
+                            <span style={{color:'var(--muted)',textAlign:'center'}}>{it.qty} {it.unit}</span>
+                            <span style={{color:'var(--muted)',textAlign:'right'}}>{peso(it.unitCost)} ea</span>
+                            <span style={{fontSize:9,padding:'1px 6px',borderRadius:4,background:'rgba(100,116,139,.15)',color:'#94a3b8',textAlign:'center'}}>{it.category}</span>
+                            <span style={{color:'#f1f5f9',fontWeight:700,textAlign:'right'}}>{peso((it.qty||0)*(it.unitCost||0))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal */}
+        {showForm&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+            onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
+            <div style={{background:'var(--surface)',borderRadius:14,padding:24,width:'100%',maxWidth:620,maxHeight:'90vh',overflowY:'auto',border:'1px solid var(--border)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+                <div style={{fontWeight:900,fontSize:16,color:'#f1f5f9'}}>📐 {editProj?'Edit':'New'} Project</div>
+                <button onClick={()=>setShowForm(false)} style={{background:'var(--surface2)',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:14}}>✕</button>
+              </div>
+
+              {/* Basic info */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Project Name *</div>
+                  <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
+                    placeholder="e.g. SM Signage - May 2026"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Client</div>
+                  <input value={form.client} onChange={e=>setForm(f=>({...f,client:e.target.value}))}
+                    placeholder="Client name"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Project Type</div>
+                  <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit',cursor:'pointer'}}>
+                    {TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Status</div>
+                  <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit',cursor:'pointer'}}>
+                    {STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Date</div>
+                  <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Sale Price (₱)</div>
+                  <input type="number" value={form.salePrice||''} onChange={e=>setForm(f=>({...f,salePrice:parseFloat(e.target.value)||0}))}
+                    placeholder="0.00"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Notes</div>
+                <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
+                  placeholder="Additional notes..."
+                  style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+              </div>
+
+              {/* Cost items */}
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:800,color:'#f1f5f9'}}>Cost Items</div>
+                  <button onClick={addItem}
+                    style={{padding:'4px 12px',background:'rgba(0,196,212,.12)',border:'1px solid var(--cyan)',borderRadius:6,color:'var(--cyan)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>
+                    ＋ Add Item
+                  </button>
+                </div>
+
+                {/* Items header */}
+                {form.items.length>0&&(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 24px',gap:6,marginBottom:6,padding:'0 4px'}}>
+                    {['Description','Qty','Unit','Unit Cost','Category',''].map(h=>(
+                      <div key={h} style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{h}</div>
+                    ))}
+                  </div>
+                )}
+
+                {form.items.map((it,idx)=>(
+                  <div key={it.id} style={{display:'grid',gridTemplateColumns:'1fr 60px 60px 90px 80px 24px',gap:6,marginBottom:6,alignItems:'center'}}>
+                    <input value={it.desc} onChange={e=>updateItem(idx,'desc',e.target.value)}
+                      placeholder="e.g. Tarpaulin 4x8"
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                    <input type="number" value={it.qty||''} onChange={e=>updateItem(idx,'qty',e.target.value)}
+                      placeholder="1"
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                    <select value={it.unit} onChange={e=>updateItem(idx,'unit',e.target.value)}
+                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                      {['pcs','sqm','sqft','meters','rolls','hrs','days','set','lot'].map(u=><option key={u} value={u}>{u}</option>)}
+                    </select>
+                    <input type="number" value={it.unitCost||''} onChange={e=>updateItem(idx,'unitCost',e.target.value)}
+                      placeholder="0.00"
+                      style={{padding:'6px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                    <select value={it.category} onChange={e=>updateItem(idx,'category',e.target.value)}
+                      style={{padding:'6px 4px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:5,color:'#f1f5f9',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                      {ITEM_CATS.map(cat=><option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                    <button onClick={()=>removeItem(idx)}
+                      style={{width:24,height:24,background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.3)',borderRadius:4,color:'#ef4444',cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>×</button>
+                  </div>
+                ))}
+
+                {form.items.length===0&&(
+                  <div style={{textAlign:'center',padding:'20px',color:'var(--muted)',fontSize:12,border:'1px dashed var(--border)',borderRadius:8}}>
+                    Click ＋ Add Item to add materials, labor and other costs
+                  </div>
+                )}
+              </div>
+
+              {/* Cost summary */}
+              {form.items.length>0&&(
+                <div style={{background:'var(--surface2)',borderRadius:8,padding:'12px 14px',marginBottom:16,display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>Total Cost</div>
+                    <div style={{fontSize:16,fontWeight:900,color:'#ef4444'}}>{peso(form.items.reduce((s,it)=>s+(it.qty||0)*(it.unitCost||0),0))}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>Profit / Loss</div>
+                    <div style={{fontSize:16,fontWeight:900,color:(form.salePrice||0)-form.items.reduce((s,it)=>s+(it.qty||0)*(it.unitCost||0),0)>=0?'#22c55e':'#ef4444'}}>
+                      {peso((form.salePrice||0)-form.items.reduce((s,it)=>s+(it.qty||0)*(it.unitCost||0),0))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--muted)',marginBottom:2}}>Margin</div>
+                    <div style={{fontSize:16,fontWeight:900,color:'#00c4d4'}}>
+                      {form.salePrice>0?(((form.salePrice-form.items.reduce((s,it)=>s+(it.qty||0)*(it.unitCost||0),0))/form.salePrice)*100).toFixed(1)+'%':'—'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <button onClick={()=>setShowForm(false)}
+                  style={{padding:'8px 18px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,color:'var(--muted)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+                  Cancel
+                </button>
+                <button onClick={saveProject}
+                  style={{padding:'8px 20px',background:'var(--cyan)',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+                  💾 Save Project
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return(
     <div style={{minHeight:'100vh',background:'var(--bg)'}}>
       {badge&&<div className="save-badge">✅ Saved</div>}
@@ -2999,6 +3304,7 @@ function App(){
             ['ledger','📒','Ledger'],
             ['budgets','🎯','Budgets'],
             ['liabilities','📋','Liabilities'],
+            ['projects','📐','Projects'],
             ['accounts','🏦','Accounts'],
           ].map(([v,ic,label])=>(
             <button key={v} onClick={()=>setView(v)}
@@ -3022,6 +3328,7 @@ function App(){
       {view==='ledger'&&<LedgerView/>}
       {view==='budgets'&&<BudgetsView/>}
       {view==='liabilities'&&<LiabilitiesView/>}
+      {view==='projects'&&<ProjectsView/>}
       {view==='accounts'&&<AccountsView/>}
 
       {/* Add/Edit Entry Modal */}

@@ -2966,7 +2966,8 @@ function App(){
       salePrice:0,date:today(),notes:'',
       items:[]
     });
-    const emptyItem=()=>({id:'item_'+Date.now(),desc:'',qty:1,unit:'pcs',unitCost:0,category:'Material'});
+    const itemCounter=React.useRef(0);
+    const emptyItem=()=>({id:'item_'+(++itemCounter.current),desc:'',qty:1,unit:'pcs',unitCost:0,category:'Material'});
 
     const[showForm,setShowForm]=React.useState(false);
     const[editProj,setEditProj]=React.useState(null);
@@ -3117,8 +3118,9 @@ function App(){
         {/* Modal */}
         {showForm&&(
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
-            onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
-            <div style={{background:'var(--surface)',borderRadius:14,padding:24,width:'100%',maxWidth:620,maxHeight:'90vh',overflowY:'auto',border:'1px solid var(--border)'}}>
+            onClick={e=>e.stopPropagation()}>
+            <div style={{background:'var(--surface)',borderRadius:14,padding:24,width:'100%',maxWidth:620,maxHeight:'90vh',overflowY:'auto',border:'1px solid var(--border)'}}
+              onClick={e=>e.stopPropagation()}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
                 <div style={{fontWeight:900,fontSize:16,color:'#f1f5f9'}}>📐 {editProj?'Edit':'New'} Project</div>
                 <button onClick={()=>setShowForm(false)} style={{background:'var(--surface2)',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:14}}>✕</button>

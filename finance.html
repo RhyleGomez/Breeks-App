@@ -1536,31 +1536,35 @@ function App(){
     const closingBal=rows.length>0?rows[rows.length-1].runBal:openingBal;
 
     const updateBlank=(bid,field,val)=>setBlankRows(prev=>{
+      const bidGroup=bid.startsWith('personal')?'personal':'business';
       const updated=prev.map(r=>{
         if(r._bid!==bid)return r;
-        if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type||'expense',group:info.group||r.group||group};}
+        if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type||'expense',group:bidGroup};}
         return{...r,[field]:val};
       });
       return updated;
     });
 
     const saveBlankRow=(bid,overrideAmount,overrideType)=>{
+      // Extract group from bid prefix (e.g. 'business_b0' → 'business')
+      const bidGroup=bid.startsWith('personal')?'personal':'business';
       setBlankRows(prev=>{
         const r=prev.find(x=>x._bid===bid);
         const amt=parseFloat(overrideAmount||r?.amount||0);
         if(!r||amt<=0)return prev;
         const typ=overrideType||r.type||'expense';
         const info=CAT_TYPE[r.category]||{};
-        const grpCount=entries.filter(en=>{const inf=CAT_TYPE[en.category]||{};return(inf.group||en.group)===group;}).length;
+        // Always use bidGroup — never let CAT_TYPE override the journal group
+        const entryGroup=bidGroup;
+        const grpCount=entries.filter(en=>{const inf=CAT_TYPE[en.category]||{};return(inf.group||en.group)===entryGroup;}).length;
         const e={...r,id:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-          amount:amt,type:info.type||typ,group:info.group||r.group||group,
+          amount:amt,type:info.type||typ,group:entryGroup,
           sortOrder:grpCount*10+10};
         delete e._bid;
         setTimeout(()=>setEntries(p=>[...p,e]),0);
         setTimeout(()=>showBadge(),50);
-        // Reset this row to blank
         return prev.map(x=>x._bid===bid
-          ?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}
+          ?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:bidGroup}
           :x);
       });
     };

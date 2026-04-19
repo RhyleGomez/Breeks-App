@@ -618,7 +618,7 @@ function App(){
     const grpAccs=accounts.filter(a=>a.type===grp);
     const grpEntries=entries.filter(e=>{
       const info=CAT_TYPE[e.category]||{};
-      return(info.group||e.group)===grp;
+      return(e.group||info.group)===grp;
     });
     const grpRange=grpEntries.filter(e=>inRange(e.date));
     const totalBal=grpAccs.reduce((s,a)=>s+(accBal[a.id]||0),0);
@@ -1097,7 +1097,7 @@ function App(){
 
     const filtered=useMemo(()=>sortedEntries.filter(e=>{
       const info=CAT_TYPE[e.category]||{};
-      const grp=info.group||e.group||'business';
+      const grp=e.group||info.group||'business';
       const typ=info.type||e.type||'income';
       if(filterGroup!=='all'&&grp!==filterGroup)return false;
       if(filterType!=='all'&&typ!==filterType)return false;
@@ -1512,7 +1512,7 @@ function App(){
 
     // Entries for this group only — sorted by date, then creation order
     const groupEntries=useMemo(()=>[...entries]
-      .filter(e=>{const info=CAT_TYPE[e.category]||{};return(info.group||e.group)===group;})
+      .filter(e=>e.group===group)
       .sort((a,b)=>{
         // Sort by date first
         const dateCmp=a.date.localeCompare(b.date);
@@ -1972,7 +1972,7 @@ function App(){
     const[rGroup,setRGroup]=useState('business');
     const grpRange=useMemo(()=>rangeEntries.filter(e=>{
       const info=CAT_TYPE[e.category]||{};
-      return(info.group||e.group)===rGroup;
+      return(e.group||info.group)===rGroup;
     }),[rangeEntries,rGroup]);
     const inc=grpRange.filter(e=>(CAT_TYPE[e.category]?.type||e.type)==='income').reduce((s,e)=>s+(e.amount||0),0);
     const exp=grpRange.filter(e=>(CAT_TYPE[e.category]?.type||e.type)==='expense').reduce((s,e)=>s+(e.amount||0),0);
@@ -2182,7 +2182,7 @@ function App(){
       const{from,to}=getPeriodRange(b);
       return entries.filter(e=>{
         const info=CAT_TYPE[e.category]||{};
-        const grp=info.group||e.group||'business';
+        const grp=e.group||info.group||'business';
         const typ=info.type||e.type||'income';
         return e.category===b.category&&grp===b.group&&typ===b.type&&e.date>=from&&e.date<=to;
       }).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);

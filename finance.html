@@ -502,6 +502,8 @@ function App(){
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
   const[projects,setProjects]=useLS('fin2_projects',[]);
+  const[bizBlankRows,setBizBlankRows]=React.useState(()=>Array.from({length:20},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));
+  const[perBlankRows,setPerBlankRows]=React.useState(()=>Array.from({length:20},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));
   const[showProjForm,setShowProjForm]=React.useState(false);
   const[editProjId,setEditProjId]=React.useState(null);
   const[projForm,setProjForm]=React.useState({name:'',client:'',type:'Signage',status:'Active',salePrice:0,date:'',notes:'',items:[]});
@@ -1493,19 +1495,9 @@ function App(){
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
     const COL='80px 110px 130px 1fr 95px 95px 100px 28px';
 
-    const BLANK_ROWS=20;
-    const[blankRows,setBlankRows]=useState(()=>
-      Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))
-    );
-
-    // Reset blank rows when switching between Business/Personal
-    const prevGroup=React.useRef(group);
-    React.useEffect(()=>{
-      if(prevGroup.current!==group){
-        prevGroup.current=group;
-        setBlankRows(Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group})));
-      }
-    },[group]);
+    // Use App-level blankRows per group — never reset on re-render
+    const blankRows=group==='business'?bizBlankRows:perBlankRows;
+    const setBlankRows=group==='business'?setBizBlankRows:setPerBlankRows;
     const[activeCell,setActiveCell]=useState(null);
     const[editingVal,setEditingVal]=useState('');
 

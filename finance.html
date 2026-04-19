@@ -58,11 +58,13 @@ const BIZ_EXPENSE_CATS=[
   "Raw Materials","Ink & Consumables","Tarpaulin & Vinyl","Substrates & Paper",
   "Materials & Supplies","Printing & Production","Equipment & Assets","Equipment Purchase",
   "Freight & Delivery","Supplier Payment",
-  "Utilities","Rent / Lease","Salaries & Wages","SSS / PhilHealth / Pag-IBIG",
+  "Utilities","Electric Bill","Water Bill","Internet Bill","Phone Bill",
+  "Rent / Lease","Salaries & Wages","SSS / PhilHealth / Pag-IBIG",
   "Marketing & Advertising","Transport & Delivery","Bank Charges",
   "Professional Fees","Software & Subscriptions","Office Supplies",
   "Repairs & Maintenance","Taxes & Licenses","Insurance",
-  "Meals & Entertainment","Loan Payment","Other Business Expense"
+  "Meals & Entertainment","Loan Payment","BillEase","Credit Card Payment",
+  "Other Business Expense"
 ];
 const PER_INCOME_CATS=[
   "Salary","Freelance Income","Business Allowance","Investment Returns",
@@ -70,11 +72,13 @@ const PER_INCOME_CATS=[
   "Government Benefit","Other Personal Income"
 ];
 const PER_EXPENSE_CATS=[
-  "Food & Groceries","Dining Out","Transportation","Utilities",
+  "Food & Groceries","Dining Out","Transportation",
+  "Utilities","Electric Bill","Water Bill","Internet Bill","Phone Bill",
   "Rent / Mortgage","Health & Medicine","Education","Shopping & Clothing",
   "Entertainment","Personal Care","Family & Kids","Travel",
-  "Loan Payment","Bank Charges","Gifts & Donations","Subscriptions",
-  "Mobile & Internet","Savings Transfer","Other Personal Expense"
+  "Loan Payment","BillEase","Credit Card Payment","Bank Charges",
+  "Gifts & Donations","Subscriptions","Mobile & Internet",
+  "Savings Transfer","Other Personal Expense"
 ];
 
 const CAT_TYPE={};
@@ -2153,7 +2157,7 @@ function App(){
     const[budgetTab,setBudgetTab]=useState('business');
     const[showAddBudget,setShowAddBudget]=useState(false);
     const[editBudget,setEditBudget]=useState(null);
-    const[bForm,setBForm]=useState({category:'',type:'expense',group:'business',limit:'',period:'monthly',startDate:new Date().toISOString().slice(0,7)});
+    const[bForm,setBForm]=useState({category:'',type:'expense',group:'business',limit:'',period:'monthly',startDate:new Date().toISOString().slice(0,7),notes:''});
 
     // ── Purchase Plans state ──
     const[plans,setPlans]=useLS('fin2_plans',[]);
@@ -2206,7 +2210,7 @@ function App(){
     const saveBudget=()=>{
       if(!bForm.category){alert('Select a category.');return;}
       if(!bForm.limit||parseFloat(bForm.limit)<=0){alert('Enter a valid limit.');return;}
-      const b={...bForm,id:editBudget?editBudget.id:'b_'+Date.now(),limit:parseFloat(bForm.limit)};
+      const b={...bForm,id:editBudget?editBudget.id:'b_'+Date.now(),limit:parseFloat(bForm.limit),notes:bForm.notes||''};
       if(editBudget)setBudgets(p=>p.map(x=>x.id===b.id?b:x));
       else setBudgets(p=>[...p,b]);
       setShowAddBudget(false);setEditBudget(null);
@@ -2515,6 +2519,86 @@ function App(){
           </div>
         )}
 
+        {/* Quick Setup — Utilities & Fixed Payables */}
+        {(()=>{
+          const month=new Date().toISOString().slice(0,7);
+          const QUICK=[
+            {group:'business',section:'⚡ Utilities',items:[
+              {category:'Electric Bill',icon:'💡',suggested:3000},
+              {category:'Water Bill',icon:'💧',suggested:500},
+              {category:'Internet Bill',icon:'📶',suggested:1500},
+              {category:'Phone Bill',icon:'📱',suggested:1000},
+            ]},
+            {group:'business',section:'📋 Fixed Monthly Payables',items:[
+              {category:'Rent / Lease',icon:'🏢',suggested:15000},
+              {category:'Salaries & Wages',icon:'👷',suggested:0},
+              {category:'SSS / PhilHealth / Pag-IBIG',icon:'🏛️',suggested:0},
+              {category:'Credit Card Payment',icon:'💳',suggested:0},
+            ]},
+            {group:'personal',section:'⚡ Utilities',items:[
+              {category:'Electric Bill',icon:'💡',suggested:2000},
+              {category:'Water Bill',icon:'💧',suggested:400},
+              {category:'Internet Bill',icon:'📶',suggested:1299},
+              {category:'Phone Bill',icon:'📱',suggested:799},
+            ]},
+            {group:'personal',section:'📋 Fixed Monthly Payables',items:[
+              {category:'Rent / Mortgage',icon:'🏠',suggested:0},
+              {category:'Credit Card Payment',icon:'💳',suggested:0},
+            ]},
+          ];
+          const sections=QUICK.filter(s=>s.group===budgetTab);
+          const existingCats=grpBudgets.map(b=>b.category);
+          const hasUnset=sections.some(s=>s.items.some(it=>!existingCats.includes(it.category)));
+          if(!hasUnset)return null;
+          return(
+            <div style={{marginBottom:20,background:'var(--surface)',border:'1px solid rgba(0,196,212,.2)',borderRadius:12,padding:'14px 16px'}}>
+              <div style={{fontSize:12,fontWeight:800,color:'var(--cyan)',marginBottom:12}}>⚡ Quick Setup — Utilities & Fixed Monthly Bills</div>
+              {sections.map(s=>{
+                const unset=s.items.filter(it=>!existingCats.includes(it.category));
+                if(unset.length===0)return null;
+                return(
+                  <div key={s.section} style={{marginBottom:12}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--muted)',marginBottom:8}}>{s.section}</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                      {unset.map(it=>(
+                        <button key={it.category} onClick={()=>{
+                          const amt=window.prompt(`Set monthly budget for ${it.category}:`,it.suggested||'');
+                          if(amt===null)return;
+                          const lim=parseFloat(amt)||0;
+                          if(lim<=0){alert('Enter a valid amount.');return;}
+                          setBudgets(p=>[...p,{id:'b_'+Date.now(),category:it.category,type:'expense',group:budgetTab,limit:lim,period:'monthly',startDate:month}]);
+                          showBadge();
+                        }}
+                        style={{padding:'6px 12px',background:'rgba(0,196,212,.08)',border:'1px solid rgba(0,196,212,.3)',borderRadius:8,color:'var(--cyan)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+                          <span>{it.icon}</span>
+                          <span>{it.category}</span>
+                          {it.suggested>0&&<span style={{color:'var(--muted)',fontSize:9}}>~{peso(it.suggested)}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Add Custom Bill button */}
+              <div style={{marginTop:4}}>
+                <button onClick={()=>{
+                  const name=window.prompt('Enter bill name (e.g. Netflix, Gym, Association Dues):');
+                  if(!name||!name.trim())return;
+                  const amt=window.prompt(`Monthly amount for ${name.trim()}:`,'');
+                  if(amt===null)return;
+                  const lim=parseFloat(amt)||0;
+                  if(lim<=0){alert('Enter a valid amount.');return;}
+                  setBudgets(p=>[...p,{id:'b_'+Date.now(),category:name.trim(),type:'expense',group:budgetTab,limit:lim,period:'monthly',startDate:new Date().toISOString().slice(0,7)}]);
+                  showBadge();
+                }}
+                style={{padding:'6px 14px',background:'rgba(168,85,247,.1)',border:'1px dashed rgba(168,85,247,.4)',borderRadius:8,color:'#a855f7',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
+                  ＋ Add Custom Monthly Bill
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Expense budgets */}
         <div style={{marginBottom:20}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
@@ -2587,6 +2671,13 @@ function App(){
                 <input type="number" min="0" step="0.01" className="form-input" placeholder="0.00"
                   value={bForm.limit} onChange={e=>setBForm(f=>({...f,limit:e.target.value}))}
                   style={{fontSize:20,fontWeight:900,color:bForm.type==='income'?'#22c55e':'#ef4444'}}/>
+              </div>
+
+              {/* Description */}
+              <div style={{marginBottom:12}}>
+                <div className="form-label">Description / Notes (optional)</div>
+                <input className="form-input" placeholder="e.g. Meralco bill, PLDT fiber plan..."
+                  value={bForm.notes||''} onChange={e=>setBForm(f=>({...f,notes:e.target.value}))}/>
               </div>
 
               {/* Period */}

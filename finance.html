@@ -1809,7 +1809,12 @@ function App(){
             </div>
           ))}
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',padding:'4px 10px',flexShrink:0}}>
-            <button onClick={()=>{const ts=Date.now();setBlankRows(prev=>[...prev,...Array.from({length:10},(_,i)=>({_bid:`${group}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))]);}}
+            <button onClick={()=>{
+                const ts=Date.now();
+                const newRows=Array.from({length:10},(_,i)=>({_bid:`${group}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}));
+                if(group==='business')setBizBlankRows(prev=>[...prev,...newRows]);
+                else setPerBlankRows(prev=>[...prev,...newRows]);
+              }}
               style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
               ＋ Add Line
             </button>

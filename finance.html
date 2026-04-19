@@ -1493,10 +1493,19 @@ function App(){
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
     const COL='80px 110px 130px 1fr 95px 95px 100px 28px';
 
-    const BLANK_ROWS=1;
+    const BLANK_ROWS=20;
     const[blankRows,setBlankRows]=useState(()=>
       Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}))
     );
+
+    // Reset blank rows when switching between Business/Personal
+    const prevGroup=React.useRef(group);
+    React.useEffect(()=>{
+      if(prevGroup.current!==group){
+        prevGroup.current=group;
+        setBlankRows(Array.from({length:BLANK_ROWS},(_,i)=>({_bid:`${group}_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group})));
+      }
+    },[group]);
     const[activeCell,setActiveCell]=useState(null);
     const[editingVal,setEditingVal]=useState('');
 

@@ -1493,7 +1493,7 @@ function App(){
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
     const accentDark=isBiz?'#2e7d32':'#6a1b9a';
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
-    const COL='80px 110px 130px 1fr 95px 95px 100px 28px';
+    const COL='85px 110px 130px 1fr 95px 95px 100px 28px';
 
     // Use App-level blankRows per group — never reset on re-render
     const blankRows=group==='business'?bizBlankRows:perBlankRows;
@@ -1787,7 +1787,7 @@ function App(){
     </>;
 
     return(
-      <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',fontFamily:'Arial,sans-serif'}}>
+      <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',fontFamily:'Arial,sans-serif',minHeight:0,overflow:'hidden'}}>
         {/* Panel header */}
         <div style={{background:accentColor,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',borderRadius:'8px 8px 0 0'}}>
           <div>
@@ -1976,7 +1976,7 @@ function App(){
           </div>
         </div>
         {/* Full width panel */}
-        <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+        <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
           <PanelJournal group={activeTab}/>
         </div>
       </div>

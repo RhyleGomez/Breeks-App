@@ -1809,22 +1809,27 @@ function App(){
             </div>
           ))}
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',padding:'4px 10px',flexShrink:0}}>
-            <button onClick={()=>{
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:10,color:accentDark,fontWeight:600}}>{blankRows.length} blank rows</span>
+              <button onClick={()=>{
                 const ts=Date.now();
                 const newRows=Array.from({length:10},(_,i)=>({_bid:`${group}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}));
                 if(group==='business')setBizBlankRows(prev=>[...prev,...newRows]);
                 else setPerBlankRows(prev=>[...prev,...newRows]);
+                // Scroll to bottom of journal
+                setTimeout(()=>{const el=document.querySelector('.journal-scroll');if(el)el.scrollTop=el.scrollHeight;},100);
               }}
               style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
               ＋ Add Line
-            </button>
+              </button>
+            </div>
           </div>
         </div>
 
 
 
         {/* Journal table */}
-        <div style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff',position:'relative'}}>
+        <div className="journal-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff',position:'relative'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:accentColor,position:'sticky',top:0,zIndex:5}}>
             {['Date','Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(

@@ -1506,6 +1506,70 @@ function App(){
     const[editingVal,setEditingVal]=useState('');
     const[filterFrom,setFilterFrom]=useState('');
     const[filterTo,setFilterTo]=useState('');
+    const scrollLockRef=React.useRef(null);
+
+    // Lock scroll position during saves
+    const lockScroll=()=>{
+      const el=document.querySelector('.journal-scroll');
+      if(el){scrollLockRef.current=el.scrollTop;}
+    };
+    const restoreScroll=()=>{
+      if(scrollLockRef.current===null)return;
+      const el=document.querySelector('.journal-scroll');
+      if(el){
+        el.scrollTop=scrollLockRef.current;
+        // Keep restoring for 300ms to fight React re-render resets
+        const start=Date.now();
+        const iv=setInterval(()=>{
+          if(el)el.scrollTop=scrollLockRef.current;
+          if(Date.now()-start>300){clearInterval(iv);scrollLockRef.current=null;}
+        },16);
+      }
+    };
+
+    // Keyboard navigation
+    const NAV_COLS=['date','accountId','category','note','inc_amount','exp_amount'];
+
+    const navigateCell=(rowId,col,direction)=>{
+      const savedIds=rows.map(r=>r.id);
+      const blankIds=blankRows.map(r=>r._bid);
+      const allIds=[...savedIds,...blankIds];
+      const curRowIdx=allIds.indexOf(rowId);
+      const curColIdx=NAV_COLS.indexOf(col)<0?0:NAV_COLS.indexOf(col);
+
+      let nextRowIdx=curRowIdx;
+      let nextColIdx=curColIdx;
+
+      if(direction==='down'){nextRowIdx=Math.min(curRowIdx+1,allIds.length-1);}
+      else if(direction==='up'){nextRowIdx=Math.max(curRowIdx-1,0);}
+      else if(direction==='tab'){
+        nextColIdx=curColIdx+1;
+        if(nextColIdx>=NAV_COLS.length){nextColIdx=0;nextRowIdx=Math.min(curRowIdx+1,allIds.length-1);}
+      } else if(direction==='shifttab'){
+        nextColIdx=curColIdx-1;
+        if(nextColIdx<0){nextColIdx=NAV_COLS.length-1;nextRowIdx=Math.max(curRowIdx-1,0);}
+      }
+
+      const nextId=allIds[nextRowIdx];
+      const nextCol=NAV_COLS[nextColIdx];
+      if(!nextId)return;
+
+      setEditingVal('');
+      setActiveCell({rowId:nextId,col:nextCol});
+
+      setTimeout(()=>{
+        const scrollEl=document.querySelector('.journal-scroll');
+        const rowEl=scrollEl?.querySelector(`[data-rowid="${nextId}"]`);
+        if(rowEl&&scrollEl){
+          const rowTop=rowEl.offsetTop;
+          const rowBot=rowTop+rowEl.offsetHeight;
+          const visTop=scrollEl.scrollTop;
+          const visBot=visTop+scrollEl.clientHeight;
+          if(rowTop<visTop)scrollEl.scrollTop=rowTop-8;
+          else if(rowBot>visBot)scrollEl.scrollTop=rowBot-scrollEl.clientHeight+8;
+        }
+      },30);
+    };
 
     // Entries for this group only — sorted by date, then creation order
     const groupEntries=useMemo(()=>[...entries]
@@ -1607,12 +1671,21 @@ function App(){
 
     const TextCell=({rowId,field,value,placeholder,style={}})=>{
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
+      const save=()=>{rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);};
       return(
         <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
           {isActive
             ?<input autoFocus value={editingVal} onChange={e=>setEditingVal(e.target.value)}
-                onBlur={()=>{rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);setActiveCell(null);}}
-                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                onBlur={()=>{save();setActiveCell(null);}}
+                onKeyDown={e=>{
+                  if(e.key==='Enter'){e.preventDefault();save();navigateCell(rowId,field,'down');}
+                  else if(e.key==='Tab'){e.preventDefault();save();navigateCell(rowId,field,e.shiftKey?'shifttab':'tab');}
+                  else if(e.key==='ArrowDown'){e.preventDefault();save();navigateCell(rowId,field,'down');}
+                  else if(e.key==='ArrowUp'){e.preventDefault();save();navigateCell(rowId,field,'up');}
+                  else if(e.key==='ArrowRight'&&editingVal.length===0){e.preventDefault();save();navigateCell(rowId,field,'right');}
+                  else if(e.key==='ArrowLeft'&&editingVal.length===0){e.preventDefault();save();navigateCell(rowId,field,'left');}
+                  else if(e.key==='Escape')setActiveCell(null);
+                }}
                 style={cellFocus}/>
             :<div style={{padding:'6px 8px',fontSize:11,color:value?'#1a1a1a':'#bbb',fontStyle:value?'normal':'italic',display:'flex',alignItems:'center',minHeight:36}}>{value||placeholder}</div>}
         </div>
@@ -1629,7 +1702,12 @@ function App(){
         const extract=(node)=>{
           if(!node)return;
           if(Array.isArray(node)){node.forEach(extract);return;}
-          if(node.type==='option')list.push({label:node.props.children,value:node.props.value});
+          if(node.type==='option'){
+            const lbl=Array.isArray(node.props.children)
+              ?node.props.children.filter(x=>typeof x==='string').join(' ')
+              :String(node.props.children||'');
+            if(lbl)list.push({label:lbl,value:node.props.value||''});
+          }
           if(node.props&&node.props.children)extract(node.props.children);
         };
         extract(options);
@@ -1637,7 +1715,7 @@ function App(){
       },[options]);
 
       const filtered=search
-        ?flatOpts.filter(o=>o.label.toLowerCase().includes(search.toLowerCase()))
+        ?flatOpts.filter(o=>String(o.label||'').toLowerCase().includes(search.toLowerCase()))
         :flatOpts;
 
       const handleSelect=(val)=>{
@@ -1783,20 +1861,23 @@ function App(){
                   }
                   setActiveCell(null);
                 }}
-                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
-                  if(parseFloat(editingVal)>0){
-                    updateBlank(rowId,'amount',editingVal);
-                    updateBlank(rowId,'type','expense');
-                    const scrollEl2=document.querySelector('.journal-scroll');
-                    const scrollPos2=scrollEl2?scrollEl2.scrollTop:0;
-                    setTimeout(()=>{
-                      saveBlankRow(rowId,editingVal,'expense');
+                onKeyDown={e=>{
+                  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+                    e.preventDefault();
+                    if(parseFloat(editingVal)>0){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','expense');}
+                    navigateCell(rowId,'exp_amount',e.key==='ArrowDown'?'down':'up');
+                  } else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
+                    if(parseFloat(editingVal)>0){
+                      updateBlank(rowId,'amount',editingVal);
+                      updateBlank(rowId,'type','expense');
+                      lockScroll();
                       setTimeout(()=>{
-                        if(scrollEl2)scrollEl2.scrollTop=scrollPos2;
-                      },80);
-                    },50);
-                  }
-                  setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                        saveBlankRow(rowId,editingVal,'expense');
+                        restoreScroll();
+                      },50);
+                    }
+                    navigateCell(rowId,'exp_amount',e.shiftKey?'shifttab':'down');
+                  } else if(e.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
         </div>
@@ -1900,7 +1981,7 @@ function App(){
             const acc=accounts.find(a=>a.id===e.accountId);
             const rowBg=i%2===0?'#fff':'#fafffe';
             return(
-              <div key={e.id}
+              <div key={e.id} data-rowid={e.id}
                 style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg,transition:'background .1s'}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=accentLight}
                 onMouseLeave={ev=>ev.currentTarget.style.background=rowBg}>
@@ -1959,7 +2040,7 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} data-blank="true" style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
+              <div key={r._bid} data-blank="true" data-rowid={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
 
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:'3px solid #e0e0e0'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>

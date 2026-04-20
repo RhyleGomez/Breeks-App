@@ -1743,7 +1743,15 @@ function App(){
                   if(parseFloat(editingVal)>0){
                     updateBlank(rowId,'amount',editingVal);
                     updateBlank(rowId,'type','income');
-                    setTimeout(()=>saveBlankRow(rowId,editingVal,'income'),50);
+                    setTimeout(()=>{
+                      saveBlankRow(rowId,editingVal,'income');
+                      // Keep scroll position after save
+                      setTimeout(()=>{
+                        const el=document.querySelector('.journal-scroll');
+                        const rows=el?.querySelectorAll('[data-blank="true"]');
+                        if(rows&&rows.length>0)rows[0].scrollIntoView({block:'center',behavior:'smooth'});
+                      },150);
+                    },50);
                   }
                   setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
@@ -1773,7 +1781,14 @@ function App(){
                   if(parseFloat(editingVal)>0){
                     updateBlank(rowId,'amount',editingVal);
                     updateBlank(rowId,'type','expense');
-                    setTimeout(()=>saveBlankRow(rowId,editingVal,'expense'),50);
+                    setTimeout(()=>{
+                      saveBlankRow(rowId,editingVal,'expense');
+                      setTimeout(()=>{
+                        const el=document.querySelector('.journal-scroll');
+                        const rows=el?.querySelectorAll('[data-blank="true"]');
+                        if(rows&&rows.length>0)rows[0].scrollIntoView({block:'center',behavior:'smooth'});
+                      },150);
+                    },50);
                   }
                   setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
@@ -1917,7 +1932,7 @@ function App(){
             const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
-              <div key={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
+              <div key={r._bid} data-blank="true" style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
 
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:'3px solid #e0e0e0'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
@@ -2087,6 +2102,123 @@ function App(){
             ))}
           </div>
         </div>
+      {/* ── BREAK-EVEN CALCULATOR ── */}
+      {rGroup==='business'&&(
+        <div className="card" style={{marginTop:16,padding:'16px'}}>
+          <div style={{fontWeight:800,fontSize:13,color:'#fff',marginBottom:4}}>🧮 Break-Even Calculator</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:14}}>How many jobs/sales do you need to cover your costs?</div>
+          {(()=>{
+            const fixedCosts=[
+              {label:'Salaries & Wages',cat:'Salaries & Wages'},
+              {label:'Rent / Lease',cat:'Rent / Lease'},
+              {label:'SSS / PhilHealth / Pag-IBIG',cat:'SSS / PhilHealth / Pag-IBIG'},
+              {label:'Utilities',cat:'Utilities'},
+              {label:'Electric Bill',cat:'Electric Bill'},
+              {label:'Water Bill',cat:'Water Bill'},
+              {label:'Internet Bill',cat:'Internet Bill'},
+              {label:'Phone Bill',cat:'Phone Bill'},
+              {label:'Software & Subscriptions',cat:'Software & Subscriptions'},
+              {label:'Insurance',cat:'Insurance'},
+            ];
+            const varCosts=[
+              {label:'Raw Materials',cat:'Raw Materials'},
+              {label:'Ink & Consumables',cat:'Ink & Consumables'},
+              {label:'Tarpaulin & Vinyl',cat:'Tarpaulin & Vinyl'},
+              {label:'Substrates & Paper',cat:'Substrates & Paper'},
+              {label:'Materials & Supplies',cat:'Materials & Supplies'},
+              {label:'Freight & Delivery',cat:'Freight & Delivery'},
+              {label:'Transport & Delivery',cat:'Transport & Delivery'},
+            ];
+            const getAmt=(cat)=>rEntries.filter(e=>e.category===cat&&e.typ==='expense').reduce((s,e)=>s+(e.amount||0),0);
+            const totalFixed=fixedCosts.reduce((s,x)=>s+getAmt(x.cat),0);
+            const totalVar=varCosts.reduce((s,x)=>s+getAmt(x.cat),0);
+            const totalInc=rEntries.filter(e=>e.typ==='income').reduce((s,e)=>s+(e.amount||0),0);
+            const totalExp=rEntries.filter(e=>e.typ==='expense').reduce((s,e)=>s+(e.amount||0),0);
+            const grossProfit=totalInc-totalVar;
+            const grossMargin=totalInc>0?(grossProfit/totalInc*100):0;
+            const breakEven=grossMargin>0?(totalFixed/(grossMargin/100)):0;
+            const netProfit=totalInc-totalExp;
+            const jobsEntries=rEntries.filter(e=>e.typ==='income'&&e.category==='Sales Revenue').length;
+            const avgJobValue=jobsEntries>0?totalInc/jobsEntries:0;
+            const jobsNeeded=avgJobValue>0?Math.ceil(breakEven/avgJobValue):0;
+            return(
+              <div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+                  {/* Fixed Costs */}
+                  <div style={{background:'var(--surface2)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'#f59e0b',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>🔒 Fixed Costs (this period)</div>
+                    {fixedCosts.filter(x=>getAmt(x.cat)>0).map(x=>(
+                      <div key={x.cat} style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:4}}>
+                        <span style={{color:'var(--muted)'}}>{x.label}</span>
+                        <span style={{color:'#f1f5f9',fontWeight:600}}>{peso(getAmt(x.cat))}</span>
+                      </div>
+                    ))}
+                    {fixedCosts.filter(x=>getAmt(x.cat)>0).length===0&&<div style={{fontSize:11,color:'var(--muted)',fontStyle:'italic'}}>No fixed costs found in this period</div>}
+                    <div style={{borderTop:'1px solid var(--border)',marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontWeight:800}}>
+                      <span style={{color:'#f59e0b',fontSize:12}}>Total Fixed</span>
+                      <span style={{color:'#f59e0b',fontSize:13}}>{peso(totalFixed)}</span>
+                    </div>
+                  </div>
+                  {/* Variable Costs */}
+                  <div style={{background:'var(--surface2)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'#ef4444',textTransform:'uppercase',letterSpacing:.5,marginBottom:8}}>📦 Variable Costs (this period)</div>
+                    {varCosts.filter(x=>getAmt(x.cat)>0).map(x=>(
+                      <div key={x.cat} style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:4}}>
+                        <span style={{color:'var(--muted)'}}>{x.label}</span>
+                        <span style={{color:'#f1f5f9',fontWeight:600}}>{peso(getAmt(x.cat))}</span>
+                      </div>
+                    ))}
+                    {varCosts.filter(x=>getAmt(x.cat)>0).length===0&&<div style={{fontSize:11,color:'var(--muted)',fontStyle:'italic'}}>No variable costs found in this period</div>}
+                    <div style={{borderTop:'1px solid var(--border)',marginTop:6,paddingTop:6,display:'flex',justifyContent:'space-between',fontWeight:800}}>
+                      <span style={{color:'#ef4444',fontSize:12}}>Total Variable</span>
+                      <span style={{color:'#ef4444',fontSize:13}}>{peso(totalVar)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Break-even results */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:14}}>
+                  {[
+                    {label:'Gross Margin',value:grossMargin.toFixed(1)+'%',color:grossMargin>=30?'#22c55e':grossMargin>=15?'#f59e0b':'#ef4444',note:'Revenue after variable costs'},
+                    {label:'Break-Even Revenue',value:peso(breakEven),color:'var(--cyan)',note:'Min sales to cover fixed costs'},
+                    {label:'Current Revenue',value:peso(totalInc),color:totalInc>=breakEven?'#22c55e':'#ef4444',note:totalInc>=breakEven?'✅ Above break-even':'⚠️ Below break-even'},
+                    {label:'Net Profit / Loss',value:peso(netProfit),color:netProfit>=0?'#22c55e':'#ef4444',note:netProfit>=0?'Profitable period':'Loss this period'},
+                  ].map(x=>(
+                    <div key={x.label} style={{background:'var(--surface2)',borderRadius:8,padding:'10px 12px',textAlign:'center'}}>
+                      <div style={{fontSize:9,color:'var(--muted)',marginBottom:4,textTransform:'uppercase',letterSpacing:.4}}>{x.label}</div>
+                      <div style={{fontSize:15,fontWeight:900,color:x.color,marginBottom:2}}>{x.value}</div>
+                      <div style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>{x.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Jobs needed */}
+                {avgJobValue>0&&(
+                  <div style={{background:totalInc>=breakEven?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',border:`1px solid ${totalInc>=breakEven?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'}`,borderRadius:8,padding:'12px 16px',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+                    <div style={{fontSize:24}}>🎯</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:800,color:'#f1f5f9',marginBottom:2}}>
+                        {totalInc>=breakEven
+                          ?`You've passed break-even! Keep going 💪`
+                          :`You need ${jobsNeeded} more job${jobsNeeded===1?'':'s'} to break even`}
+                      </div>
+                      <div style={{fontSize:11,color:'var(--muted)'}}>
+                        Avg job value: {peso(avgJobValue)} · Break-even at: {peso(breakEven)} · Current: {peso(totalInc)}
+                      </div>
+                    </div>
+                    {totalInc<breakEven&&(
+                      <div style={{textAlign:'center'}}>
+                        <div style={{fontSize:28,fontWeight:900,color:'#ef4444'}}>{jobsNeeded}</div>
+                        <div style={{fontSize:9,color:'var(--muted)'}}>jobs needed</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
       </div>
     );
   };

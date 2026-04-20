@@ -1787,13 +1787,13 @@ function App(){
                   if(parseFloat(editingVal)>0){
                     updateBlank(rowId,'amount',editingVal);
                     updateBlank(rowId,'type','expense');
+                    const scrollEl2=document.querySelector('.journal-scroll');
+                    const scrollPos2=scrollEl2?scrollEl2.scrollTop:0;
                     setTimeout(()=>{
                       saveBlankRow(rowId,editingVal,'expense');
                       setTimeout(()=>{
-                        const el=document.querySelector('.journal-scroll');
-                        const rows=el?.querySelectorAll('[data-blank="true"]');
-                        if(rows&&rows.length>0)rows[0].scrollIntoView({block:'center',behavior:'smooth'});
-                      },150);
+                        if(scrollEl2)scrollEl2.scrollTop=scrollPos2;
+                      },80);
                     },50);
                   }
                   setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}

@@ -1504,16 +1504,15 @@ function App(){
     const setBlankRows=group==='business'?setBizBlankRows:setPerBlankRows;
     const[activeCell,setActiveCell]=useState(null);
     const[editingVal,setEditingVal]=useState('');
-
+    const[filterFrom,setFilterFrom]=useState('');
+    const[filterTo,setFilterTo]=useState('');
 
     // Entries for this group only — sorted by date, then creation order
     const groupEntries=useMemo(()=>[...entries]
       .filter(e=>e.group===group)
       .sort((a,b)=>{
-        // Sort by date first
         const dateCmp=a.date.localeCompare(b.date);
         if(dateCmp!==0)return dateCmp;
-        // Same date — use creation timestamp from id
         const getTs=(e)=>{
           const parts=e.id&&e.id.split('_');
           return parts&&parts[1]?parseInt(parts[1]):0;
@@ -1522,19 +1521,26 @@ function App(){
       })
     ,[entries,group]);
 
+    // Apply date filter
+    const filteredEntries=useMemo(()=>groupEntries.filter(e=>{
+      if(filterFrom&&e.date<filterFrom)return false;
+      if(filterTo&&e.date>filterTo)return false;
+      return true;
+    }),[groupEntries,filterFrom,filterTo]);
+
     // Opening balance = sum of all accounts in this group
     const groupAccounts=useMemo(()=>accounts.filter(a=>a.type===group),[accounts,group]);
     const openingBal=useMemo(()=>groupAccounts.reduce((s,a)=>s+(parseFloat(a.openingBalance)||0),0),[groupAccounts]);
 
     const rows=useMemo(()=>{
       let bal=openingBal;
-      return groupEntries.map(e=>{
+      return filteredEntries.map(e=>{
         const typ=CAT_TYPE[e.category]?.type||e.type||'income';
         const isInc=typ==='income';
         bal=isInc?bal+(parseFloat(e.amount)||0):bal-(parseFloat(e.amount)||0);
         return{...e,isInc,runBal:bal};
       });
-    },[groupEntries,openingBal]);
+    },[filteredEntries,openingBal]);
 
     const totInc=rows.filter(r=>r.isInc).reduce((s,r)=>s+(r.amount||0),0);
     const totExp=rows.filter(r=>!r.isInc).reduce((s,r)=>s+(r.amount||0),0);
@@ -1817,6 +1823,27 @@ function App(){
             <div style={{fontSize:11,color:'rgba(255,255,255,.7)'}}>Balance</div>
             <div style={{fontSize:18,fontWeight:900,color:'#fff'}}>{peso(closingBal)}</div>
           </div>
+        </div>
+
+        {/* Date filter bar */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--surface)',borderBottom:`1px solid ${borderClr}`,flexWrap:'wrap'}}>
+          <span style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:.5}}>📅 Filter:</span>
+          <input type="date" value={filterFrom} onChange={e=>setFilterFrom(e.target.value)}
+            style={{padding:'4px 8px',background:'var(--surface2)',border:`1px solid ${borderClr}`,borderRadius:5,color:'var(--text)',fontSize:11,outline:'none',colorScheme:'dark'}}/>
+          <span style={{fontSize:10,color:'var(--muted)'}}>to</span>
+          <input type="date" value={filterTo} onChange={e=>setFilterTo(e.target.value)}
+            style={{padding:'4px 8px',background:'var(--surface2)',border:`1px solid ${borderClr}`,borderRadius:5,color:'var(--text)',fontSize:11,outline:'none',colorScheme:'dark'}}/>
+          {(filterFrom||filterTo)&&(
+            <button onClick={()=>{setFilterFrom('');setFilterTo('');}}
+              style={{padding:'4px 10px',background:'rgba(239,68,68,.1)',border:'1px solid rgba(239,68,68,.3)',borderRadius:5,color:'#ef4444',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              ✕ Clear
+            </button>
+          )}
+          {(filterFrom||filterTo)&&(
+            <span style={{fontSize:10,color:accentDark,fontWeight:600,marginLeft:'auto'}}>
+              {rows.length} entries shown
+            </span>
+          )}
         </div>
 
         {/* Account balances mini + Add Line button */}

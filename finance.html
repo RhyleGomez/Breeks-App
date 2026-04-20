@@ -2129,16 +2129,17 @@ function App(){
               {label:'Freight & Delivery',cat:'Freight & Delivery'},
               {label:'Transport & Delivery',cat:'Transport & Delivery'},
             ];
-            const getAmt=(cat)=>rEntries.filter(e=>e.category===cat&&e.typ==='expense').reduce((s,e)=>s+(e.amount||0),0);
+            const getTyp=(e)=>CAT_TYPE[e.category]?.type||e.type||'expense';
+            const getAmt=(cat)=>grpRange.filter(e=>e.category===cat&&getTyp(e)==='expense').reduce((s,e)=>s+(e.amount||0),0);
             const totalFixed=fixedCosts.reduce((s,x)=>s+getAmt(x.cat),0);
             const totalVar=varCosts.reduce((s,x)=>s+getAmt(x.cat),0);
-            const totalInc=rEntries.filter(e=>e.typ==='income').reduce((s,e)=>s+(e.amount||0),0);
-            const totalExp=rEntries.filter(e=>e.typ==='expense').reduce((s,e)=>s+(e.amount||0),0);
+            const totalInc=grpRange.filter(e=>getTyp(e)==='income').reduce((s,e)=>s+(e.amount||0),0);
+            const totalExp=grpRange.filter(e=>getTyp(e)==='expense').reduce((s,e)=>s+(e.amount||0),0);
             const grossProfit=totalInc-totalVar;
             const grossMargin=totalInc>0?(grossProfit/totalInc*100):0;
             const breakEven=grossMargin>0?(totalFixed/(grossMargin/100)):0;
             const netProfit=totalInc-totalExp;
-            const jobsEntries=rEntries.filter(e=>e.typ==='income'&&e.category==='Sales Revenue').length;
+            const jobsEntries=grpRange.filter(e=>getTyp(e)==='income'&&e.category==='Sales Revenue').length;
             const avgJobValue=jobsEntries>0?totalInc/jobsEntries:0;
             const jobsNeeded=avgJobValue>0?Math.ceil(breakEven/avgJobValue):0;
             return(

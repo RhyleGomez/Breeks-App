@@ -528,6 +528,9 @@ function App(){
   const[filterGroup,setFilterGroup]=useState('all');
   const[filterType,setFilterType]=useState('all');
   const[filterAcc,setFilterAcc]=useState('all');
+  const[filterCat,setFilterCat]=useState('all');
+  const[filterDateFrom,setFilterDateFrom]=useState('');
+  const[filterDateTo,setFilterDateTo]=useState('');
   const[rFrom,setRFrom]=useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10));
   const[rTo,setRTo]=useState(today());
   const[newCatShow,setNewCatShow]=useState(false);
@@ -1108,9 +1111,12 @@ function App(){
       if(filterGroup!=='all'&&grp!==filterGroup)return false;
       if(filterType!=='all'&&typ!==filterType)return false;
       if(filterAcc!=='all'&&e.accountId!==filterAcc)return false;
+      if(filterCat!=='all'&&e.category!==filterCat)return false;
+      if(filterDateFrom&&e.date<filterDateFrom)return false;
+      if(filterDateTo&&e.date>filterDateTo)return false;
       if(searchQ&&!(e.category+(e.note||'')+(e.amount||'')).toLowerCase().includes(searchQ.toLowerCase()))return false;
       return true;
-    }),[sortedEntries,filterGroup,filterType,filterAcc,searchQ]);
+    }),[sortedEntries,filterGroup,filterType,filterAcc,filterCat,filterDateFrom,filterDateTo,searchQ]);
 
     const openingBal=useMemo(()=>{
       if(filterAcc!=='all'){const a=accounts.find(x=>x.id===filterAcc);return parseFloat(a?.openingBalance)||0;}
@@ -1320,19 +1326,41 @@ function App(){
         </div>
 
         {/* Filters */}
-        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap',alignItems:'center'}}>
           <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="🔍 Search…"
             style={{flex:1,minWidth:120,padding:'6px 10px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
-          <select value={filterAcc} onChange={e=>setFilterAcc(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
-            <option value="all">All Accounts</option>
-            {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
-          </select>
           <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="all">All Groups</option><option value="business">💼 Business</option><option value="personal">👤 Personal</option>
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
-            <option value="all">All Types</option><option value="income">Income</option><option value="expense">Expense</option>
+            <option value="all">All Types</option><option value="income">⬆️ Income</option><option value="expense">⬇️ Expense</option>
           </select>
+          <select value={filterAcc} onChange={e=>setFilterAcc(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
+            <option value="all">All Accounts</option>
+            {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+          </select>
+        </div>
+        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
+          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{flex:1,minWidth:150,padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
+            <option value="all">All Categories</option>
+            {(()=>{
+              const cats=[...new Set(entries.map(e=>e.category).filter(Boolean))].sort();
+              return cats.map(cat=><option key={cat} value={cat}>{cat}</option>);
+            })()}
+          </select>
+          <span style={{fontSize:11,color:'#666',whiteSpace:'nowrap'}}>📅 From</span>
+          <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}
+            style={{padding:'5px 8px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
+          <span style={{fontSize:11,color:'#666'}}>to</span>
+          <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}
+            style={{padding:'5px 8px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
+          {(filterCat!=='all'||filterDateFrom||filterDateTo)&&(
+            <button onClick={()=>{setFilterCat('all');setFilterDateFrom('');setFilterDateTo('');}}
+              style={{padding:'5px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:5,color:'#ef4444',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
+              ✕ Clear
+            </button>
+          )}
+          <span style={{fontSize:10,color:'#666',marginLeft:'auto',whiteSpace:'nowrap'}}>{rows.length} entries</span>
         </div>
 
         {/* Spreadsheet */}

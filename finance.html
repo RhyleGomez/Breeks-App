@@ -528,9 +528,6 @@ function App(){
   const[filterGroup,setFilterGroup]=useState('all');
   const[filterType,setFilterType]=useState('all');
   const[filterAcc,setFilterAcc]=useState('all');
-  const[filterCat,setFilterCat]=useState('all');
-  const[filterDateFrom,setFilterDateFrom]=useState('');
-  const[filterDateTo,setFilterDateTo]=useState('');
   const[rFrom,setRFrom]=useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10));
   const[rTo,setRTo]=useState(today());
   const[newCatShow,setNewCatShow]=useState(false);
@@ -1111,12 +1108,9 @@ function App(){
       if(filterGroup!=='all'&&grp!==filterGroup)return false;
       if(filterType!=='all'&&typ!==filterType)return false;
       if(filterAcc!=='all'&&e.accountId!==filterAcc)return false;
-      if(filterCat!=='all'&&e.category!==filterCat)return false;
-      if(filterDateFrom&&e.date<filterDateFrom)return false;
-      if(filterDateTo&&e.date>filterDateTo)return false;
       if(searchQ&&!(e.category+(e.note||'')+(e.amount||'')).toLowerCase().includes(searchQ.toLowerCase()))return false;
       return true;
-    }),[sortedEntries,filterGroup,filterType,filterAcc,filterCat,filterDateFrom,filterDateTo,searchQ]);
+    }),[sortedEntries,filterGroup,filterType,filterAcc,searchQ]);
 
     const openingBal=useMemo(()=>{
       if(filterAcc!=='all'){const a=accounts.find(x=>x.id===filterAcc);return parseFloat(a?.openingBalance)||0;}
@@ -1326,41 +1320,19 @@ function App(){
         </div>
 
         {/* Filters */}
-        <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
           <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="🔍 Search…"
             style={{flex:1,minWidth:120,padding:'6px 10px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
-          <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
-            <option value="all">All Groups</option><option value="business">💼 Business</option><option value="personal">👤 Personal</option>
-          </select>
-          <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
-            <option value="all">All Types</option><option value="income">⬆️ Income</option><option value="expense">⬇️ Expense</option>
-          </select>
           <select value={filterAcc} onChange={e=>setFilterAcc(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
             <option value="all">All Accounts</option>
             {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
           </select>
-        </div>
-        <div style={{display:'flex',gap:6,marginBottom:10,flexWrap:'wrap',alignItems:'center'}}>
-          <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{flex:1,minWidth:150,padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
-            <option value="all">All Categories</option>
-            {(()=>{
-              const cats=[...new Set(entries.map(e=>e.category).filter(Boolean))].sort();
-              return cats.map(cat=><option key={cat} value={cat}>{cat}</option>);
-            })()}
+          <select value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
+            <option value="all">All Groups</option><option value="business">💼 Business</option><option value="personal">👤 Personal</option>
           </select>
-          <span style={{fontSize:11,color:'#666',whiteSpace:'nowrap'}}>📅 From</span>
-          <input type="date" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}
-            style={{padding:'5px 8px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
-          <span style={{fontSize:11,color:'#666'}}>to</span>
-          <input type="date" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}
-            style={{padding:'5px 8px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none'}}/>
-          {(filterCat!=='all'||filterDateFrom||filterDateTo)&&(
-            <button onClick={()=>{setFilterCat('all');setFilterDateFrom('');setFilterDateTo('');}}
-              style={{padding:'5px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:5,color:'#ef4444',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
-              ✕ Clear
-            </button>
-          )}
-          <span style={{fontSize:10,color:'#666',marginLeft:'auto',whiteSpace:'nowrap'}}>{rows.length} entries</span>
+          <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{padding:'6px 9px',background:'#fff',border:`1px solid ${borderClr}`,borderRadius:5,color:'#1a1a1a',fontSize:11,outline:'none',cursor:'pointer'}}>
+            <option value="all">All Types</option><option value="income">Income</option><option value="expense">Expense</option>
+          </select>
         </div>
 
         {/* Spreadsheet */}
@@ -1534,23 +1506,29 @@ function App(){
     const[editingVal,setEditingVal]=useState('');
     const[filterFrom,setFilterFrom]=useState('');
     const[filterTo,setFilterTo]=useState('');
+    const scrollContainerRef=React.useRef(null);
     const scrollLockRef=React.useRef(null);
+    const scrollLockInterval=React.useRef(null);
 
-    // Lock scroll position during saves
+    // Lock scroll position during saves — uses direct ref, not querySelector
     const lockScroll=()=>{
-      const el=document.querySelector('.journal-scroll');
+      const el=scrollContainerRef.current;
       if(el){scrollLockRef.current=el.scrollTop;}
     };
     const restoreScroll=()=>{
       if(scrollLockRef.current===null)return;
-      const el=document.querySelector('.journal-scroll');
+      if(scrollLockInterval.current)clearInterval(scrollLockInterval.current);
+      const el=scrollContainerRef.current;
       if(el){
         el.scrollTop=scrollLockRef.current;
-        // Keep restoring for 300ms to fight React re-render resets
         const start=Date.now();
-        const iv=setInterval(()=>{
+        scrollLockInterval.current=setInterval(()=>{
           if(el)el.scrollTop=scrollLockRef.current;
-          if(Date.now()-start>300){clearInterval(iv);scrollLockRef.current=null;}
+          if(Date.now()-start>400){
+            clearInterval(scrollLockInterval.current);
+            scrollLockInterval.current=null;
+            scrollLockRef.current=null;
+          }
         },16);
       }
     };
@@ -1586,7 +1564,7 @@ function App(){
       setActiveCell({rowId:nextId,col:nextCol});
 
       setTimeout(()=>{
-        const scrollEl=document.querySelector('.journal-scroll');
+        const scrollEl=scrollContainerRef.current;
         const rowEl=scrollEl?.querySelector(`[data-rowid="${nextId}"]`);
         if(rowEl&&scrollEl){
           const rowTop=rowEl.offsetTop;
@@ -1699,7 +1677,7 @@ function App(){
 
     const TextCell=({rowId,field,value,placeholder,style={}})=>{
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
-      const save=()=>{rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);};
+      const save=()=>{lockScroll();rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);restoreScroll();};
       return(
         <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
           {isActive
@@ -1984,7 +1962,7 @@ function App(){
 
 
         {/* Journal table */}
-        <div className="journal-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff',position:'relative'}}>
+        <div ref={scrollContainerRef} className="journal-scroll" style={{flex:1,overflowY:'auto',overflowX:'auto',border:`1px solid ${borderClr}`,borderTop:'none',borderRadius:'0 0 8px 8px',minHeight:0,background:'#fff',position:'relative'}}>
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:accentColor,position:'sticky',top:0,zIndex:5}}>
             {['Date','Account','Category','Description','Income','Expense','Balance',''].map((h,i)=>(

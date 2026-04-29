@@ -506,8 +506,11 @@ function App(){
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
   const[projects,setProjects]=useLS('fin2_projects',[]);
-  const[bizBlankRows,setBizBlankRows]=React.useState(()=>Array.from({length:20},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));
-  const[perBlankRows,setPerBlankRows]=React.useState(()=>Array.from({length:20},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));
+  const[bizBlankRows,setBizBlankRows]=React.useState(()=>Array.from({length:1},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));
+  const[perBlankRows,setPerBlankRows]=React.useState(()=>Array.from({length:1},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));
+  // Scroll refs live at App level so they survive PanelJournal re-renders
+  const journalScrollRef=React.useRef(null);
+  const journalScrollLockRef=React.useRef(null);
   const[showProjForm,setShowProjForm]=React.useState(false);
   const[editProjId,setEditProjId]=React.useState(null);
   const[projForm,setProjForm]=React.useState({name:'',client:'',type:'Signage',status:'Active',salePrice:0,date:'',notes:'',items:[]});
@@ -1200,7 +1203,7 @@ function App(){
     const TextCell=({rowId,field,value,placeholder,style={}})=>{
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
+        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setEditingVal(value||'')}}}>
           {isActive
             ?<input autoFocus value={editingVal} onChange={e=>setEditingVal(e.target.value)}
                 onBlur={()=>{
@@ -1225,7 +1228,7 @@ function App(){
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
       const display=value||'';
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
+        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setEditingVal(value||'')}}}>
           {isActive
             ?<select autoFocus value={display}
                 onChange={e=>{
@@ -1250,7 +1253,7 @@ function App(){
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
       const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value>0?String(value):'');}}}>
+        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setEditingVal(value>0?String(value):'')}}}>
           {isActive
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                 onChange={e=>setEditingVal(e.target.value)}
@@ -1491,7 +1494,7 @@ function App(){
   };
 
   // ── PANEL JOURNAL (reusable for split view) ────────────────────────────────
-  const PanelJournal=({group})=>{
+  const PanelJournal=({group,journalScrollRef,journalScrollLockRef})=>{
     const isBiz=group==='business';
     const accentColor=isBiz?'#4caf50':'#9c27b0';
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
@@ -1506,31 +1509,25 @@ function App(){
     const[editingVal,setEditingVal]=useState('');
     const[filterFrom,setFilterFrom]=useState('');
     const[filterTo,setFilterTo]=useState('');
-    const scrollContainerRef=React.useRef(null);
-    const scrollLockRef=React.useRef(null);
-    const scrollLockInterval=React.useRef(null);
+    // Use App-level refs so scroll position survives PanelJournal re-renders
+    const scrollContainerRef=journalScrollRef;
+    const scrollLockRef=journalScrollLockRef;
 
-    // Lock scroll position during saves — uses direct ref, not querySelector
+    // useLayoutEffect: runs sync before browser paint on every render
+    React.useLayoutEffect(()=>{
+      const el=scrollContainerRef.current;
+      if(el&&scrollLockRef.current!==null){
+        el.scrollTop=scrollLockRef.current;
+      }
+    });
+
     const lockScroll=()=>{
       const el=scrollContainerRef.current;
-      if(el){scrollLockRef.current=el.scrollTop;}
+      if(!el)return;
+      scrollLockRef.current=el.scrollTop;
     };
     const restoreScroll=()=>{
-      if(scrollLockRef.current===null)return;
-      if(scrollLockInterval.current)clearInterval(scrollLockInterval.current);
-      const el=scrollContainerRef.current;
-      if(el){
-        el.scrollTop=scrollLockRef.current;
-        const start=Date.now();
-        scrollLockInterval.current=setInterval(()=>{
-          if(el)el.scrollTop=scrollLockRef.current;
-          if(Date.now()-start>400){
-            clearInterval(scrollLockInterval.current);
-            scrollLockInterval.current=null;
-            scrollLockRef.current=null;
-          }
-        },16);
-      }
+      scrollLockRef.current=null;
     };
 
     // Keyboard navigation
@@ -1560,10 +1557,13 @@ function App(){
       const nextCol=NAV_COLS[nextColIdx];
       if(!nextId)return;
 
+      lockScroll();
       setEditingVal('');
       setActiveCell({rowId:nextId,col:nextCol});
-
+      // useLayoutEffect will enforce scrollLockRef on every render
+      // Release lock after React has settled, then scroll target into view
       setTimeout(()=>{
+        restoreScroll();
         const scrollEl=scrollContainerRef.current;
         const rowEl=scrollEl?.querySelector(`[data-rowid="${nextId}"]`);
         if(rowEl&&scrollEl){
@@ -1574,7 +1574,7 @@ function App(){
           if(rowTop<visTop)scrollEl.scrollTop=rowTop-8;
           else if(rowBot>visBot)scrollEl.scrollTop=rowBot-scrollEl.clientHeight+8;
         }
-      },30);
+      },100);
     };
 
     // Entries for this group only — sorted by date, then creation order
@@ -1623,12 +1623,6 @@ function App(){
         if(field==='category'){const info=CAT_TYPE[val]||{};return{...r,category:val,type:info.type||r.type||'expense',group:bidGroup};}
         return{...r,[field]:val};
       });
-      // Auto-add 5 more rows when fewer than 3 empty rows remain
-      const emptyCount=updated.filter(r=>!r.accountId&&!r.category&&!r.amount).length;
-      if(emptyCount<3){
-        const ts=Date.now();
-        return[...updated,...Array.from({length:5},(_,i)=>({_bid:`${bidGroup}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:bidGroup}))];
-      }
       return updated;
     });
 
@@ -1653,12 +1647,6 @@ function App(){
         const reset=prev.map(x=>x._bid===bid
           ?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:bidGroup}
           :x);
-        // Auto-add rows if running low after save
-        const emptyAfter=reset.filter(r=>!r.accountId&&!r.category&&!r.amount).length;
-        if(emptyAfter<5){
-          const ts=Date.now();
-          return[...reset,...Array.from({length:10},(_,i)=>({_bid:`${bidGroup}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:bidGroup}))];
-        }
         return reset;
       });
     };
@@ -1679,10 +1667,10 @@ function App(){
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
       const save=()=>{lockScroll();rowId.startsWith(group+'_b')?updateBlank(rowId,field,editingVal):updateEntry(rowId,field,editingVal);restoreScroll();};
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value||'');}}}>
+        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setEditingVal(value||'')}}}>
           {isActive
             ?<input autoFocus value={editingVal} onChange={e=>setEditingVal(e.target.value)}
-                onBlur={()=>{save();setActiveCell(null);}}
+                onBlur={()=>{save();restoreScroll();setActiveCell(null);}}
                 onKeyDown={e=>{
                   if(e.key==='Enter'){e.preventDefault();save();navigateCell(rowId,field,'down');}
                   else if(e.key==='Tab'){e.preventDefault();save();navigateCell(rowId,field,e.shiftKey?'shifttab':'tab');}
@@ -1690,7 +1678,7 @@ function App(){
                   else if(e.key==='ArrowUp'){e.preventDefault();save();navigateCell(rowId,field,'up');}
                   else if(e.key==='ArrowRight'&&editingVal.length===0){e.preventDefault();save();navigateCell(rowId,field,'right');}
                   else if(e.key==='ArrowLeft'&&editingVal.length===0){e.preventDefault();save();navigateCell(rowId,field,'left');}
-                  else if(e.key==='Escape')setActiveCell(null);
+                  else if(e.key==='Escape'){restoreScroll();setActiveCell(null);}
                 }}
                 style={cellFocus}/>
             :<div style={{padding:'6px 8px',fontSize:11,color:value?'#1a1a1a':'#bbb',fontStyle:value?'normal':'italic',display:'flex',alignItems:'center',minHeight:36}}>{value||placeholder}</div>}
@@ -1725,15 +1713,16 @@ function App(){
         :flatOpts;
 
       const handleSelect=(val)=>{
+        lockScroll();
         if(rowId.startsWith(group+'_b'))updateBlank(rowId,field,val);
         else updateEntry(rowId,field,val);
         setSearch('');
-        setTimeout(()=>setActiveCell(null),0);
+        navigateCell(rowId,field,'tab');
       };
 
       return(
         <div style={{...cellBase,...style,position:'relative'}}
-          onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setSearch('');}}}>
+          onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setSearch('')}}}>
           {isActive?(
             <div style={{position:'fixed',zIndex:9999,background:'#fff',border:'2px solid #fbc02d',borderRadius:6,boxShadow:'0 8px 32px rgba(0,0,0,.25)',minWidth:200,width:220}}
               ref={el=>{
@@ -1752,7 +1741,7 @@ function App(){
               <input autoFocus value={search}
                 onChange={e=>setSearch(e.target.value)}
                 onKeyDown={e=>{
-                  if(e.key==='Escape'){setSearch('');setActiveCell(null);}
+                  if(e.key==='Escape'){setSearch('');restoreScroll();setActiveCell(null);}
                   if(e.key==='Enter'&&filtered.length>0){handleSelect(filtered[0].value);}
                   if(e.key==='Tab'){e.preventDefault();if(filtered.length>0)handleSelect(filtered[0].value);}
                 }}
@@ -1784,7 +1773,7 @@ function App(){
       const isActive=activeCell?.rowId===rowId&&activeCell?.col===field;
       const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
       return(
-        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){setActiveCell({rowId,col:field});setEditingVal(value>0?String(value):'');}}}>
+        <div style={{...cellBase,...style}} onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:field});setEditingVal(value>0?String(value):'')}}}>
           {isActive
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal} onChange={e=>setEditingVal(e.target.value)}
                 onBlur={()=>{
@@ -1793,18 +1782,26 @@ function App(){
                     const r=blankRows.find(x=>x._bid===rowId);
                     if(r&&r.accountId&&r.category&&parseFloat(editingVal)>0)setTimeout(()=>saveBlankRow(rowId),100);
                   } else updateEntry(rowId,'amount',editingVal);
-                  setActiveCell(null);
+                  restoreScroll();setActiveCell(null);
                 }}
-                onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();
-                  if(rowId.startsWith(group+'_b')){
-                    updateBlank(rowId,'amount',editingVal);
-                    const r=blankRows.find(x=>x._bid===rowId);
-                    if(r&&r.accountId&&r.category&&parseFloat(editingVal)>0){
-                      setTimeout(()=>saveBlankRow(rowId),80);
-                    }
-                  } else updateEntry(rowId,'amount',editingVal);
-                  setActiveCell(null);
-                }if(ev.key==='Escape')setActiveCell(null);}}
+                onKeyDown={ev=>{
+                  if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){
+                    ev.preventDefault();
+                    if(rowId.startsWith(group+'_b')){updateBlank(rowId,'amount',editingVal);}
+                    else updateEntry(rowId,'amount',editingVal);
+                    navigateCell(rowId,field,ev.key==='ArrowDown'?'down':'up');
+                  } else if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();
+                    if(rowId.startsWith(group+'_b')){
+                      updateBlank(rowId,'amount',editingVal);
+                      const r=blankRows.find(x=>x._bid===rowId);
+                      if(r&&r.accountId&&r.category&&parseFloat(editingVal)>0){
+                        lockScroll();
+                        setTimeout(()=>{saveBlankRow(rowId);restoreScroll();},80);
+                      }
+                    } else updateEntry(rowId,'amount',editingVal);
+                    navigateCell(rowId,field,ev.shiftKey?'shifttab':'down');
+                  } else if(ev.key==='Escape'){restoreScroll();setActiveCell(null);}
+                }}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#ddd'}}>{display||placeholder}</div>}
         </div>
@@ -1817,7 +1814,7 @@ function App(){
       const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
       return(
         <div style={{...cellBase,background:'transparent',border:'none'}}
-          onClick={()=>{if(!isActive){setActiveCell({rowId,col:'inc_amount'});setEditingVal(value>0?String(value):'');}}}>
+          onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:'inc_amount'});setEditingVal(value>0?String(value):'')}}}>
           {isActive
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                 onChange={e=>setEditingVal(e.target.value)}
@@ -1827,23 +1824,26 @@ function App(){
                     updateBlank(rowId,'type','income');
                     setTimeout(()=>saveBlankRow(rowId,editingVal,'income'),50);
                   }
-                  setActiveCell(null);
+                  restoreScroll();setActiveCell(null);
                 }}
-                onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
-                  if(parseFloat(editingVal)>0){
-                    updateBlank(rowId,'amount',editingVal);
-                    updateBlank(rowId,'type','income');
-                    setTimeout(()=>{
-                      saveBlankRow(rowId,editingVal,'income');
-                      // Keep scroll position after save
+                onKeyDown={e=>{
+                  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+                    e.preventDefault();
+                    if(parseFloat(editingVal)>0){updateBlank(rowId,'amount',editingVal);updateBlank(rowId,'type','income');}
+                    navigateCell(rowId,'inc_amount',e.key==='ArrowDown'?'down':'up');
+                  } else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();
+                    if(parseFloat(editingVal)>0){
+                      updateBlank(rowId,'amount',editingVal);
+                      updateBlank(rowId,'type','income');
+                      lockScroll();
                       setTimeout(()=>{
-                        const el=document.querySelector('.journal-scroll');
-                        const rows=el?.querySelectorAll('[data-blank="true"]');
-                        if(rows&&rows.length>0)rows[0].scrollIntoView({block:'center',behavior:'smooth'});
-                      },150);
-                    },50);
-                  }
-                  setActiveCell(null);}if(e.key==='Escape')setActiveCell(null);}}
+                        saveBlankRow(rowId,editingVal,'income');
+                        restoreScroll();
+                      },50);
+                    }
+                    navigateCell(rowId,'inc_amount',e.shiftKey?'shifttab':'down');
+                  } else if(e.key==='Escape'){restoreScroll();setActiveCell(null);}
+                }}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
         </div>
@@ -1855,7 +1855,7 @@ function App(){
       const display=value>0?'₱'+Number(value).toLocaleString('en-PH',{minimumFractionDigits:2}):'';
       return(
         <div style={{...cellBase,background:'transparent',border:'none'}}
-          onClick={()=>{if(!isActive){setActiveCell({rowId,col:'exp_amount'});setEditingVal(value>0?String(value):'');}}}>
+          onClick={()=>{if(!isActive){lockScroll();setActiveCell({rowId,col:'exp_amount'});setEditingVal(value>0?String(value):'')}}}>
           {isActive
             ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                 onChange={e=>setEditingVal(e.target.value)}
@@ -1865,7 +1865,7 @@ function App(){
                     updateBlank(rowId,'type','expense');
                     setTimeout(()=>saveBlankRow(rowId,editingVal,'expense'),50);
                   }
-                  setActiveCell(null);
+                  restoreScroll();setActiveCell(null);
                 }}
                 onKeyDown={e=>{
                   if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -1883,7 +1883,8 @@ function App(){
                       },50);
                     }
                     navigateCell(rowId,'exp_amount',e.shiftKey?'shifttab':'down');
-                  } else if(e.key==='Escape')setActiveCell(null);}}
+                  } else if(e.key==='Escape'){restoreScroll();setActiveCell(null);}
+                }}
                 style={{...cellFocus,textAlign:'right',color,fontWeight:700}}/>
             :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:display?700:400,color:display?color:'#bbb',cursor:'text'}}>{display||'0.00'}</div>}
         </div>
@@ -1941,22 +1942,7 @@ function App(){
               <div style={{fontSize:13,fontWeight:900,color:accBal[a.id]>=0?accentDark:'#c62828'}}>{peso(accBal[a.id]||0)}</div>
             </div>
           ))}
-          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',padding:'4px 10px',flexShrink:0}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:10,color:accentDark,fontWeight:600}}>{blankRows.length} blank rows</span>
-              <button onClick={()=>{
-                const ts=Date.now();
-                const newRows=Array.from({length:10},(_,i)=>({_bid:`${group}_b${ts}_${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}));
-                if(group==='business')setBizBlankRows(prev=>[...prev,...newRows]);
-                else setPerBlankRows(prev=>[...prev,...newRows]);
-                // Scroll to bottom of journal
-                setTimeout(()=>{const el=document.querySelector('.journal-scroll');if(el)el.scrollTop=el.scrollHeight;},100);
-              }}
-              style={{padding:'5px 14px',background:accentColor,border:'none',borderRadius:6,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
-              ＋ Add Line
-              </button>
-            </div>
-          </div>
+
         </div>
 
 
@@ -2002,8 +1988,9 @@ function App(){
                   {activeCell?.rowId===e.id&&activeCell?.col==='inc_data'
                     ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                         onChange={ev=>setEditingVal(ev.target.value)}
-                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}setActiveCell(null);}}
-                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}restoreScroll();setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','income');}restoreScroll();setActiveCell(null);}if(ev.key==='Escape'){restoreScroll();setActiveCell(null);}
+                        }}
                         style={{...cellFocus,textAlign:'right',color:accentColor,fontWeight:700}}/>
                     :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:e.isInc&&e.amount>0?700:400,color:e.isInc&&e.amount>0?accentColor:'#ddd'}}>
                       {e.isInc&&e.amount>0?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
@@ -2015,8 +2002,9 @@ function App(){
                   {activeCell?.rowId===e.id&&activeCell?.col==='exp_data'
                     ?<input autoFocus type="number" min="0" step="0.01" value={editingVal}
                         onChange={ev=>setEditingVal(ev.target.value)}
-                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}setActiveCell(null);}}
-                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}setActiveCell(null);}if(ev.key==='Escape')setActiveCell(null);}}
+                        onBlur={()=>{if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}restoreScroll();setActiveCell(null);}}
+                        onKeyDown={ev=>{if(ev.key==='Enter'||ev.key==='Tab'){ev.preventDefault();if(parseFloat(editingVal)>0){updateEntry(e.id,'amount',editingVal);updateEntry(e.id,'type','expense');}restoreScroll();setActiveCell(null);}if(ev.key==='Escape'){restoreScroll();setActiveCell(null);}
+                        }}
                         style={{...cellFocus,textAlign:'right',color:'#e53935',fontWeight:700}}/>
                     :<div style={{padding:'6px 8px',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36,fontWeight:!e.isInc&&e.amount>0?700:400,color:!e.isInc&&e.amount>0?'#e53935':'#ddd'}}>
                       {!e.isInc&&e.amount>0?'₱'+Number(e.amount).toLocaleString('en-PH',{minimumFractionDigits:2}):'—'}
@@ -2043,23 +2031,21 @@ function App(){
             const info=CAT_TYPE[r.category]||{};
             const isInc=info.type==='income';
             const isExp=info.type==='expense';
-            const hasCat=!!r.category;
             const rowBg=(rows.length+i)%2===0?'#fff':'#fafffe';
             return(
               <div key={r._bid} data-blank="true" data-rowid={r._bid} style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:rowBg}}>
-
                 <TextCell rowId={r._bid} field="date" value={r.date} placeholder="Date" style={{background:'inherit',fontSize:10,borderLeft:'3px solid #e0e0e0'}}/>
                 <SelectCell rowId={r._bid} field="accountId" value={r.accountId?accounts.find(a=>a.id===r.accountId)?.name||r.accountId:''} placeholder="Account…" options={accOpts} style={{background:'inherit'}}/>
                 <SelectCell rowId={r._bid} field="category" value={r.category} placeholder="Category…" options={catOpts} style={{background:'inherit'}}/>
                 <TextCell rowId={r._bid} field="note" value={r.note||''} placeholder="Description…" style={{background:'inherit',fontSize:10,color:'#888'}}/>
-                {/* Income column — always editable, disabled if category is expense */}
+                {/* Income — editable unless category is confirmed expense */}
                 <div style={{...cellBase,background:isExp?'rgba(0,0,0,.02)':'inherit'}}>
                   {isExp
                     ?<div style={{padding:'6px 10px',color:'#ccc',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>
                     :<AmountCellIncome rowId={r._bid} value={isInc?parseFloat(r.amount)||0:0} color={accentColor}/>
                   }
                 </div>
-                {/* Expense column — always editable, disabled if category is income */}
+                {/* Expense — editable unless category is confirmed income */}
                 <div style={{...cellBase,background:isInc?'rgba(0,0,0,.02)':'inherit'}}>
                   {isInc
                     ?<div style={{padding:'6px 10px',color:'#ccc',fontSize:11,display:'flex',alignItems:'center',justifyContent:'flex-end',minHeight:36}}>—</div>
@@ -2067,10 +2053,31 @@ function App(){
                   }
                 </div>
                 <div style={{...cellBase,background:'inherit',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'6px 8px',fontSize:10,color:'#ccc',fontStyle:'italic',borderRight:`1px solid ${borderClr}`}}>auto</div>
-
               </div>
             );
           })}
+
+          {/* Add Line button — sits right after the last blank row */}
+          <div style={{display:'grid',gridTemplateColumns:COL,minWidth:700,background:'#f8fff8',borderTop:`2px dashed ${borderClr}`}}>
+            <div style={{gridColumn:'1/-1',padding:'6px 12px'}}>
+              <button onClick={()=>{
+                lockScroll();
+                const ts=Date.now();
+                const newRow={_bid:`${group}_b${ts}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group};
+                if(group==='business')setBizBlankRows(prev=>[...prev,newRow]);
+                else setPerBlankRows(prev=>[...prev,newRow]);
+                setTimeout(()=>{
+                  restoreScroll();
+                  const el=scrollContainerRef.current;
+                  if(el)el.scrollTop=el.scrollHeight;
+                },80);
+              }}
+              style={{padding:'5px 18px',background:'transparent',border:`1.5px dashed ${accentColor}`,borderRadius:6,color:accentDark,fontWeight:800,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}>
+                ＋ Add Line
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     );
@@ -2110,7 +2117,7 @@ function App(){
         </div>
         {/* Full width panel */}
         <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-          <PanelJournal group={activeTab}/>
+          <PanelJournal group={activeTab} journalScrollRef={journalScrollRef} journalScrollLockRef={journalScrollLockRef}/>
         </div>
       </div>
     );
@@ -4184,8 +4191,8 @@ function App(){
             </div>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
               <div style={{fontWeight:700,fontSize:12,color:'#ef4444',marginBottom:8}}>🗑 Clear Entries</div>
-              <button onClick={()=>{if(window.confirm('Clear all BUSINESS entries?')){setEntries(prev=>prev.filter(e=>e.group==='personal'));setBizBlankRows(Array.from({length:20},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>💼 Clear Business Entries</button>
-              <button onClick={()=>{if(window.confirm('Clear all PERSONAL entries?')){setEntries(prev=>prev.filter(e=>e.group==='business'));setPerBlankRows(Array.from({length:20},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>👤 Clear Personal Entries</button>
+              <button onClick={()=>{if(window.confirm('Clear all BUSINESS entries?')){setEntries(prev=>prev.filter(e=>e.group==='personal'));setBizBlankRows(Array.from({length:1},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>💼 Clear Business Entries</button>
+              <button onClick={()=>{if(window.confirm('Clear all PERSONAL entries?')){setEntries(prev=>prev.filter(e=>e.group==='business'));setPerBlankRows(Array.from({length:1},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>👤 Clear Personal Entries</button>
               <button onClick={()=>{if(window.confirm('Clear ALL data? This cannot be undone.')){setEntries([]);setAccounts(DEFAULT_ACCOUNTS);showBadge();setShowSettings(false);}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.08)',border:'1px solid #ef4444',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12}}>🗑 Clear All Data</button>
             </div>
           </div>

@@ -506,11 +506,17 @@ function App(){
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
   const[projects,setProjects]=useLS('fin2_projects',[]);
-  const[bizBlankRows,setBizBlankRows]=React.useState(()=>Array.from({length:1},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));
-  const[perBlankRows,setPerBlankRows]=React.useState(()=>Array.from({length:1},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));
+
   // Scroll refs live at App level so they survive PanelJournal re-renders
   const journalScrollRef=React.useRef(null);
   const journalScrollLockRef=React.useRef(null);
+  // Enforce scroll lock on EVERY render at App level - fires before browser paint
+  React.useLayoutEffect(()=>{
+    const el=journalScrollRef.current;
+    if(el&&journalScrollLockRef.current!==null){
+      el.scrollTop=journalScrollLockRef.current;
+    }
+  });
   const[showProjForm,setShowProjForm]=React.useState(false);
   const[editProjId,setEditProjId]=React.useState(null);
   const[projForm,setProjForm]=React.useState({name:'',client:'',type:'Signage',status:'Active',salePrice:0,date:'',notes:'',items:[]});
@@ -1494,7 +1500,7 @@ function App(){
   };
 
   // ── PANEL JOURNAL (reusable for split view) ────────────────────────────────
-  const PanelJournal=({group,journalScrollRef,journalScrollLockRef})=>{
+  const PanelJournal=React.memo(({group,journalScrollRef,journalScrollLockRef})=>{
     const isBiz=group==='business';
     const accentColor=isBiz?'#4caf50':'#9c27b0';
     const accentLight=isBiz?'#e8f5e9':'#f3e5f5';
@@ -1502,9 +1508,8 @@ function App(){
     const borderClr=isBiz?'#c8e6c9':'#e1bee7';
     const COL='85px 110px 130px 1fr 95px 95px 100px 28px';
 
-    // Use App-level blankRows per group — never reset on re-render
-    const blankRows=group==='business'?bizBlankRows:perBlankRows;
-    const setBlankRows=group==='business'?setBizBlankRows:setPerBlankRows;
+    // Local blank row state — updates only re-render PanelJournal, not the whole App
+    const[blankRows,setBlankRows]=useState(()=>[{_bid:`${group}_b0`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group}]);
     const[activeCell,setActiveCell]=useState(null);
     const[editingVal,setEditingVal]=useState('');
     const[filterFrom,setFilterFrom]=useState('');
@@ -1513,13 +1518,7 @@ function App(){
     const scrollContainerRef=journalScrollRef;
     const scrollLockRef=journalScrollLockRef;
 
-    // useLayoutEffect: runs sync before browser paint on every render
-    React.useLayoutEffect(()=>{
-      const el=scrollContainerRef.current;
-      if(el&&scrollLockRef.current!==null){
-        el.scrollTop=scrollLockRef.current;
-      }
-    });
+    // scroll lock enforced by App-level useLayoutEffect
 
     const lockScroll=()=>{
       const el=scrollContainerRef.current;
@@ -1642,7 +1641,8 @@ function App(){
           amount:amt,type:info.type||typ,group:entryGroup,
           sortOrder:grpCount*10+10};
         delete e._bid;
-        setTimeout(()=>setEntries(p=>[...p,e]),0);
+        lockScroll();
+        setTimeout(()=>{setEntries(p=>[...p,e]);setTimeout(restoreScroll,100);},0);
         setTimeout(()=>showBadge(),50);
         const reset=prev.map(x=>x._bid===bid
           ?{_bid:bid,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:bidGroup}
@@ -2064,8 +2064,7 @@ function App(){
                 lockScroll();
                 const ts=Date.now();
                 const newRow={_bid:`${group}_b${ts}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group};
-                if(group==='business')setBizBlankRows(prev=>[...prev,newRow]);
-                else setPerBlankRows(prev=>[...prev,newRow]);
+                setBlankRows(prev=>[...prev,newRow]);
                 setTimeout(()=>{
                   restoreScroll();
                   const el=scrollContainerRef.current;
@@ -2081,7 +2080,7 @@ function App(){
         </div>
       </div>
     );
-  };
+  });
 
   // ── SPLIT JOURNAL VIEW ─────────────────────────────────────────────────────
   const SplitJournalView=()=>{
@@ -4191,8 +4190,8 @@ function App(){
             </div>
             <div style={{borderTop:'1px solid var(--border)',paddingTop:12}}>
               <div style={{fontWeight:700,fontSize:12,color:'#ef4444',marginBottom:8}}>🗑 Clear Entries</div>
-              <button onClick={()=>{if(window.confirm('Clear all BUSINESS entries?')){setEntries(prev=>prev.filter(e=>e.group==='personal'));setBizBlankRows(Array.from({length:1},(_,i)=>({_bid:`business_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'business'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>💼 Clear Business Entries</button>
-              <button onClick={()=>{if(window.confirm('Clear all PERSONAL entries?')){setEntries(prev=>prev.filter(e=>e.group==='business'));setPerBlankRows(Array.from({length:1},(_,i)=>({_bid:`personal_b${i}`,date:today(),accountId:'',category:'',note:'',amount:'',type:'income',group:'personal'})));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>👤 Clear Personal Entries</button>
+              <button onClick={()=>{if(window.confirm('Clear all BUSINESS entries?')){setEntries(prev=>prev.filter(e=>e.group==='personal'));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>💼 Clear Business Entries</button>
+              <button onClick={()=>{if(window.confirm('Clear all PERSONAL entries?')){setEntries(prev=>prev.filter(e=>e.group==='business'));showBadge();}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.4)',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12,marginBottom:6}}>👤 Clear Personal Entries</button>
               <button onClick={()=>{if(window.confirm('Clear ALL data? This cannot be undone.')){setEntries([]);setAccounts(DEFAULT_ACCOUNTS);showBadge();setShowSettings(false);}}} style={{width:'100%',padding:'8px 0',background:'rgba(239,68,68,.08)',border:'1px solid #ef4444',borderRadius:7,color:'#ef4444',fontWeight:700,cursor:'pointer',fontSize:12}}>🗑 Clear All Data</button>
             </div>
           </div>

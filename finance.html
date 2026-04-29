@@ -545,7 +545,15 @@ function App(){
   const[settingsCatText,setSettingsCatText]=useState('');
   const[settingsCatKey,setSettingsCatKey]=useState('bizExp');
 
-  const showBadge=()=>{setBadge(true);setTimeout(()=>setBadge(false),2000);};
+  const showBadge=()=>{
+    journalScrollLockRef.current=journalScrollRef.current?.scrollTop??journalScrollLockRef.current;
+    setBadge(true);
+    setTimeout(()=>{
+      journalScrollLockRef.current=journalScrollRef.current?.scrollTop??journalScrollLockRef.current;
+      setBadge(false);
+      setTimeout(()=>{journalScrollLockRef.current=null;},50);
+    },2000);
+  };
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const accBal=useMemo(()=>{

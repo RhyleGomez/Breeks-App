@@ -1771,7 +1771,12 @@ function App() {
                 return(
                   <tr key={item.lineId||item.sku+idx}>
                     <td style={R({textAlign:"center",color:"#888"})}>{idx+1}</td>
-                    <td style={R()}><div style={{fontWeight:700}}>{item.customName||item.name}</div>{item.customName&&<div style={{fontSize:9,color:"#555",fontStyle:"italic"}}>{item.name}</div>}<div style={{fontSize:9,color:"#888"}}>{item.sku}</div>{dimInfo&&<div style={{fontSize:9,color:"#0891b2",marginTop:2}}>📐 {dimInfo}</div>}</td>
+                    <td style={R()}>
+                      <div style={{fontWeight:700}}>{item.name}</div>
+                      <div style={{fontSize:9,color:"#888"}}>{item.sku}</div>
+                      {dimInfo&&<div style={{fontSize:9,color:"#0891b2",marginTop:2}}>📐 {dimInfo}</div>}
+                      {item.lineNote&&<div style={{fontSize:11,color:"#444",marginTop:2}}>{item.lineNote}</div>}
+                    </td>
                     <td style={R({textAlign:"center"})}>{item.qty}</td>
                     <td style={R({textAlign:"center",color:"#555"})}>{item.unit}</td>
                     <td style={R({textAlign:"right"})}>{Number(item.price).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>

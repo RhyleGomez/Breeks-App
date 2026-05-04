@@ -896,17 +896,12 @@ function App() {
                   <tr key={item.sku||item.lineId||idx}>
                     <td style={R({textAlign:"center",color:"#888"})}>{idx+1}</td>
                     <td style={R()}>
-                      <div style={{fontWeight:800,fontSize:12,color:"#111"}}>{item.name}</div>
+                      <div style={{fontWeight:800,fontSize:12,color:"#111"}}>{item.customName||item.name}</div>
+                      {item.customName&&<div style={{fontSize:10,color:"#555",fontStyle:"italic",marginTop:1}}>{item.name}</div>}
                       {item.sku&&<div style={{fontSize:10,color:"#888",marginTop:1}}>{item.sku}</div>}
                       {item.dimMode&&item.dimW&&item.dimH&&<div style={{fontSize:11,color:"#0891b2",fontWeight:700,marginTop:2}}>{item.dimW}×{item.dimH} {item.dimUnit||"ft"} @ ₱{item.ratePerSqFt}/{item.rateUnit||"sq ft"}</div>}
-                      <input
-                        type="text"
-                        defaultValue={item.lineNote||item.description||""}
-                        placeholder="+ add description…"
-                        onBlur={e=>{const val=e.target.value;setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo?{...x,cart:x.cart.map((c,ci)=>ci===idx?{...c,lineNote:val}:c)}:x));}}
-                        onKeyDown={e=>{if(e.key==="Enter")e.target.blur();}}
-                        style={{marginTop:3,width:"100%",padding:"2px 4px",border:"none",borderBottom:"1px dashed #c0cfe8",background:"transparent",color:"#444",fontSize:11,outline:"none",fontFamily:"inherit"}}
-                      />
+                      {item.lineNote&&<div style={{fontSize:11,color:"#92400e",marginTop:2,fontStyle:"italic"}}>Note: {item.lineNote}</div>}
+                      {item.description&&!item.lineNote&&<div style={{fontSize:10,color:"#555",marginTop:2,fontStyle:"italic"}}>{item.description}</div>}
                     </td>
                     <td style={R({textAlign:"center"})}>{item.qty}</td>
                     <td style={R({textAlign:"center",color:"#555"})}>{item.unit}</td>
@@ -928,7 +923,7 @@ function App() {
                 <tbody>
                   <tr><td style={{...td(),borderTop:"none",paddingTop:10,verticalAlign:"top"}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Remarks</div>
-                    <div style={{fontSize:13,color:"#333",minHeight:48,whiteSpace:"pre-wrap"}}>{inv?.notes||<span style={{color:"#aaa",fontStyle:"italic"}}>—</span>}</div>
+                    <div style={{fontSize:11,color:"#333",minHeight:48,whiteSpace:"pre-wrap"}}>{inv?.notes||<span style={{color:"#aaa",fontStyle:"italic"}}>—</span>}</div>
                   </td></tr>
                   <tr><td style={{...td(),paddingTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Payment Details</div>
@@ -1267,7 +1262,8 @@ function App() {
                       <tr>
                       <td style={R({textAlign:"center",color:"#888"})}>{idx+1}</td>
                       <td style={R()}>
-                        <div style={{fontWeight:700,color:"#111"}}>{item.name||<span style={{color:"#aaa",fontStyle:"italic",fontSize:10}}>No product selected</span>}</div>
+                        <div style={{fontWeight:700,color:"#111"}}>{item.customName||item.name||<span style={{color:"#aaa",fontStyle:"italic",fontSize:10}}>No product selected</span>}</div>
+                        {item.customName&&<div style={{fontSize:9,color:"#666",fontStyle:"italic"}}>{item.name}</div>}
                         {item.sku&&<div style={{fontSize:10,color:"#888"}}>{item.sku} · {peso(item.price)}/{item.unit}</div>}
                         <div className="pac-wrap" style={{marginTop:4}}>
                           <input
@@ -1298,7 +1294,7 @@ function App() {
                             </div>
                           )}
                         </div>
-                        <input type="text" value={item.lineNote||""} onChange={e=>setEditInv(ev=>({...ev,editCart:ev.editCart.map(i=>i.lineId===item.lineId?{...i,lineNote:e.target.value}:i)}))} placeholder="📝 Description / specs / notes…" style={{marginTop:4,width:"100%",padding:"3px 6px",background:"#f8faff",border:"1px solid #c0cfe8",borderRadius:3,color:"#1e3a5f",fontSize:11}}/>
+                        <input type="text" value={item.customName||""} onChange={e=>setEditInv(ev=>({...ev,editCart:ev.editCart.map(i=>i.lineId===item.lineId?{...i,customName:e.target.value}:i)}))} placeholder="✏️ Custom label (optional)" style={{marginTop:3,width:"100%",padding:"2px 5px",background:"#fffbeb",border:"1px dashed #f59e0b",borderRadius:3,color:"#92400e",fontSize:9,fontWeight:600}}/>
                         <button onClick={()=>toggleEDimMode(item.lineId)} style={{marginTop:4,padding:"2px 7px",background:item.dimMode?"#0891b2":"#e0f2fe",border:`1px solid ${item.dimMode?"#0891b2":"#7dd3fc"}`,color:item.dimMode?"#fff":"#0369a1",borderRadius:3,cursor:"pointer",fontSize:9,fontWeight:700}}>📐{item.dimMode?" DIM ON":" Set Dimensions"}</button>
                       </td>
                       <td style={R({textAlign:"center"})}>
@@ -1374,7 +1370,8 @@ function App() {
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:9,fontWeight:800,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Remarks</div>
-                  <textarea value={ei.editNotes!==undefined?ei.editNotes:(ei.notes||"")} onChange={e=>setEditInv(ev=>({...ev,editNotes:e.target.value}))} placeholder="Payment terms, delivery notes…" style={{width:"100%",padding:"8px 10px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:13,resize:"vertical",minHeight:80}}/>
+                  <textarea value={ei.editNotes!==undefined?ei.editNotes:(ei.notes||"")} onChange={e=>setEditInv(ev=>({...ev,editNotes:e.target.value}))} placeholder="Payment terms, delivery notes..."
+                    style={{width:"100%",padding:"6px 8px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"vertical",minHeight:54}}/>
                   <div style={{display:"flex",gap:8,marginTop:8}}>
                     <div style={{flex:1}}>
                       <div style={{fontSize:9,fontWeight:800,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Payment Mode</div>
@@ -1586,7 +1583,6 @@ function App() {
                               )}
                             </div>
                             <div style={{fontSize:9,color:"var(--bm)",marginTop:1}}>{item.sku&&item.name?item.sku+" · "+item.unit:""}</div>
-                            <input type="text" value={item.lineNote||""} onChange={e=>setQCart(p=>p.map(i=>i.lineId===item.lineId?{...i,lineNote:e.target.value}:i))} placeholder="📝 Description / specs / notes…" style={{marginTop:3,width:"100%",padding:"2px 6px",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:3,color:"#e2e8ff",fontSize:11}}/>
                             <button onClick={()=>toggleQDimMode(item.lineId)} style={{marginTop:3,padding:"1px 6px",background:item.dimMode?"#0891b2":"rgba(8,145,178,0.15)",border:`1px solid ${item.dimMode?"#0891b2":"#7dd3fc"}`,color:item.dimMode?"#fff":"#38bdf8",borderRadius:3,cursor:"pointer",fontSize:8,fontWeight:700}}>📐{item.dimMode?" DIM ON":" Set Dimensions"}</button>
                           </div>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>
@@ -1659,7 +1655,7 @@ function App() {
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:9,fontWeight:800,color:"#fcd34d",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Remarks</div>
-                  <textarea value={qNotes} onChange={e=>setQNotes(e.target.value)} placeholder="Validity, terms, delivery notes…" style={{width:"100%",padding:"8px 10px",background:"var(--bg)",border:"1px solid var(--bb)",borderRadius:5,color:"var(--bt)",fontSize:13,resize:"vertical",minHeight:80}}/>
+                  <textarea value={qNotes} onChange={e=>setQNotes(e.target.value)} placeholder="Validity, terms, delivery notes..." style={{width:"100%",padding:"6px 8px",background:"var(--bg)",border:"1px solid var(--bb)",borderRadius:5,color:"var(--bt)",fontSize:10,resize:"vertical",minHeight:65}}/>
                 </div>
                 <div style={{width:210,flexShrink:0,fontSize:11}}>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid var(--brand-border)",color:"var(--bm)"}}><span>Subtotal</span><span style={{fontWeight:600,color:"var(--bt)"}}>{peso(qSubtotal)}</span></div>
@@ -2107,12 +2103,13 @@ function App() {
             ? `<div style="font-size:12px;font-weight:700;color:#0891b2;margin-top:1px">📐 ${item.dimW}×${item.dimH}${item.dimUnit||"ft"} @ ₱${item.ratePerSqFt}/${item.rateUnit||"sq ft"}</div>`
             : "";
           const skuStr  = item.sku ? `<div style="font-size:9px;color:#94a3b8;margin-top:1px">${item.sku}</div>` : "";
-          const noteStr = item.lineNote ? `<div style="font-size:11px;color:#444;margin-top:3px">${item.lineNote}</div>` : "";
+          const noteStr = item.lineNote ? `<div style="font-size:11px;color:#92400e;font-style:italic;margin-top:3px">Note: ${item.lineNote}</div>` : "";
           const vatPct  = item.vat > 0 ? (item.vat*100).toFixed(0)+"%" : (inv.vatOverride!==null&&inv.vatOverride!==undefined&&inv.vatOverride>0 ? inv.vatOverride+"%" : "0%");
           const discStr = (item.disc||0) > 0 ? item.disc+"%" : "—";
           return `<tr>
               <td style="padding:7px 10px;border-bottom:1px solid #e8edf6;vertical-align:top">
-                <div style="font-weight:800;font-size:13px;color:#111">${item.name}</div>
+                <div style="font-weight:800;font-size:13px;color:#111">${item.customName||item.name}</div>
+                ${item.customName?`<div style="font-size:10px;color:#555;font-style:italic;margin-top:1px">${item.name}</div>`:""}
                 ${skuStr}${dimStr}${noteStr}
               </td>
               <td style="padding:7px 10px;border-bottom:1px solid #e8edf6;text-align:center;font-size:11px">${item.qty}</td>
@@ -2123,7 +2120,7 @@ function App() {
               <td style="padding:7px 10px;border-bottom:1px solid #e8edf6;text-align:right;font-size:11px;font-weight:700">${fmt(lineAmt)}</td>
             </tr>`;
         }).join("");
-        const notesRow = inv.notes ? `<tr><td colspan="7" style="padding:8px 12px;font-size:12px;color:#333;border-bottom:1px solid #e8edf6;background:#fffdf0;white-space:pre-wrap">${inv.notes}</td></tr>` : "";
+        const notesRow = inv.notes ? `<tr><td colspan="7" style="padding:5px 10px 8px;font-size:9px;color:#78350f;font-style:italic;border-bottom:1px solid #e8edf6;background:#fffdf0">📝 ${inv.notes}</td></tr>` : "";
         const payNotes = invPays.length > 0 ? invPays.map(p=>`<tr><td colspan="7" style="padding:3px 10px 5px;font-size:9px;color:#166534;border-bottom:1px solid #e8edf6;background:#f0fdf4">✅ Payment: ${fmtD(p.date)} · ${p.method||"Cash"}${p.ref?" · Ref: "+p.ref:""} · ${fmt(p.amount)}</td></tr>`).join("") : "";
         const statusBadge = isVoid
           ? `<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700">VOID</span>`
@@ -4748,7 +4745,7 @@ function App() {
                           <button onClick={()=>setCart(p=>p.filter(i=>i.lineId!==item.lineId))} style={{width:16,height:16,background:"#fee2e2",border:"1px solid #fca5a5",color:"#ef4444",borderRadius:3,cursor:"pointer",fontSize:9,lineHeight:1,marginLeft:2}}>✕</button>
                         </div>
                         <input type="text" value={item.lineNote||""} onChange={e=>setCart(p=>p.map(i=>i.lineId===item.lineId?{...i,lineNote:e.target.value}:i))} placeholder="📝 Note…" style={{width:"100%",marginTop:3,padding:"2px 5px",background:"#fffbea",border:"1px dashed #f59e0b",borderRadius:3,color:"#78350f",fontSize:9}}/>
-
+                        <input type="text" value={item.customName||""} onChange={e=>setCart(p=>p.map(i=>i.lineId===item.lineId?{...i,customName:e.target.value}:i))} placeholder="Custom label (optional)" style={{width:"100%",marginTop:2,padding:"2px 5px",background:"#f0fdf4",border:"1px dashed #22c55e",borderRadius:3,color:"#15803d",fontSize:9}}/>
                       </div>
                       <div style={{fontSize:10,color:"#555",textAlign:"center"}}>{item.qty}</div>
                       <div>

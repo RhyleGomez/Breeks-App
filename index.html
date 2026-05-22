@@ -258,7 +258,7 @@ function printPo(po){
       <div style="display:flex;justify-content:space-between;padding:7px 10px;background:#166534;border-radius:6px;color:#fff;font-weight:900;font-size:14px"><span>TOTAL AMOUNT</span><span>₱${Number(po.total||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>
     </div>
   </div>
-  ${po.notes?`<div style="margin-bottom:20px;padding:10px 14px;background:#fffbea;border:1px solid #fde68a;border-radius:8px"><div style="font-size:9px;font-weight:800;color:#92400e;text-transform:uppercase;margin-bottom:4px">Notes / Terms</div><div style="font-size:11px;white-space:pre-wrap">${po.notes}</div></div>`:""}
+  ${po.notes?`<div style="margin-bottom:20px;padding:10px 14px;background:#fffbea;border:1px solid #fde68a;border-radius:8px"><div style="font-size:9px;font-weight:800;color:#92400e;text-transform:uppercase;margin-bottom:4px">Notes / Terms</div><div style="font-size:11px;white-space:pre-wrap">${po.notes}</div>${po.noteImages&&po.noteImages.length>0?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${po.noteImages.map(img=>`<img src="${img.dataUrl}" style="max-width:160px;max-height:120px;border-radius:6px;border:1px solid #e5e7eb;object-fit:contain;"/>`).join('')}</div>`:''}</div>`:""}
   <div style="display:flex;justify-content:space-between;margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0">
     ${["Prepared by","Approved by","Received by"].map(l=>`<div style="text-align:center;width:28%"><div style="border-bottom:1px solid #333;margin-bottom:6px;padding-bottom:40px"></div><div style="font-size:10px;font-weight:700">${l}</div><div style="font-size:9px;color:#888;margin-top:2px">Signature over printed name</div></div>`).join("")}
   </div>
@@ -448,6 +448,7 @@ function App() {
   const [selClient,   setSelClient]   = useCloudState("pos_sel_client",  null,             appLoaded, cloudData);
   const [discount,    setDiscount]    = useCloudState("pos_discount",    0,                appLoaded, cloudData);
   const [notes,       setNotes]       = useCloudState("pos_notes",       "",               appLoaded, cloudData);
+  const [invNoteImages, setInvNoteImages] = useState([]); // [{id, dataUrl, name}]
   const [vatOverride, setVatOverride] = useCloudState("pos_vat_override", null,            appLoaded, cloudData);
   const [ewtPct,      setEwtPct]      = useCloudState("pos_ewt_pct",      0,               appLoaded, cloudData);
   const [company,     setCompany]     = useCloudState("pos_company", {
@@ -538,6 +539,7 @@ function App() {
   const [qVatOverride, setQVatOverride] = useState(null);
   const [qEwtPct,      setQEwtPct]      = useState(0);
   const [qNotes,       setQNotes]       = useState('');
+  const [qNoteImages,  setQNoteImages]  = useState([]); // [{id, dataUrl, name}]
   const [qDueDate,     setQDueDate]     = useState('');
   const [qValidDays,   setQValidDays]   = useState(30);
   const [qClientOpen,  setQClientOpen]  = useState(false);
@@ -559,6 +561,7 @@ function App() {
   const [drSelClient,   setDrSelClient]   = useState(null);
   const [drClientOpen,  setDrClientOpen]  = useState(false);
   const [drNotes,       setDrNotes]       = useState('');
+  const [drNoteImages,  setDrNoteImages]  = useState([]);
   const [drDeliveredBy, setDrDeliveredBy] = useState('');
   const [drReceivedBy,  setDrReceivedBy]  = useState('');
   const [drAddress,     setDrAddress]     = useState('');
@@ -574,6 +577,7 @@ function App() {
   const [joClientName,  setJoClientName]  = useState('');
   const [joClientOpen,  setJoClientOpen]  = useState(false);
   const [joNotes,       setJoNotes]       = useState('');
+  const [joNoteImages,  setJoNoteImages]  = useState([]);
   const [joDeadline,    setJoDeadline]    = useState('');
   const [joDiscount,    setJoDiscount]    = useState(0);
   const [joVatOverride, setJoVatOverride] = useState(null);
@@ -584,6 +588,7 @@ function App() {
   const [poCart,        setPoCart]        = useState([]);
   const [poSupplier,    setPoSupplier]    = useState({name:'',address:'',contact:'',tin:''});
   const [poNotes,       setPoNotes]       = useState('');
+  const [poNoteImages,  setPoNoteImages]  = useState([]);
   const [poDeliveryDate,setPoDeliveryDate]= useState('');
   const [poStatus,      setPoStatus]      = useState('Draft');
   const [poHistSearch,  setPoHistSearch]  = useState('');
@@ -679,7 +684,7 @@ function App() {
     const newPrice = area>0&&rate>0 ? parseFloat((area*rate).toFixed(4)) : updated.price;
     return {...updated, rateUnit, price: area>0&&rate>0 ? newPrice : updated.price};
   }));
-  const clearCart  = () => { if(window.confirm("Clear current invoice?")){ setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setOtherCharges([]); } };
+  const clearCart  = () => { if(window.confirm("Clear current invoice?")){ setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setOtherCharges([]); } };
   const subtotal   = cart.reduce((s,i)=>s+i.price*i.qty*(1-i.disc/100),0);
   const vatTotal   = vatOverride!==null
     ? subtotal*(vatOverride/100)
@@ -715,7 +720,7 @@ function App() {
     const tendered = parseFloat(amountTendered)||0;
     const isCreditMode = paymentMode==="COD" || paymentMode==="Terms";
     const invStatus = (!isCreditMode && tendered >= total && tendered > 0) ? "Paid" : "Unpaid";
-    const inv = { invoiceNo:no, date:new Date().toISOString(), dueDate:resolvedDue, client:effectiveClient, cart:[...cart], discount, vatOverride, ewtPct, ewtAmt, subtotal, vatTotal, globalDisc, otherCharges:[...otherCharges], otherTotal, total, notes, status:invStatus, paymentMode, paymentTerms, companySnap:{...company}, signatories:{...signatories} };
+    const inv = { invoiceNo:no, date:new Date().toISOString(), dueDate:resolvedDue, client:effectiveClient, cart:[...cart], discount, vatOverride, ewtPct, ewtAmt, subtotal, vatTotal, globalDisc, otherCharges:[...otherCharges], otherTotal, total, notes, noteImages:[...invNoteImages], status:invStatus, paymentMode, paymentTerms, companySnap:{...company}, signatories:{...signatories} };
     const itemRows = cart.map((item,idx) => ({ invoiceNo:no, lineNo:idx+1, sku:item.sku||"", name:item.customName||item.name, qty:item.qty, unit:item.unit||"", price:item.price, disc:item.disc||0, subtotal: parseFloat((item.price*item.qty*(1-(item.disc||0)/100)).toFixed(4)) }));
     setSalesItems(prev => [...itemRows, ...prev]);
     setHistory(h=>[inv,...h]);
@@ -726,7 +731,7 @@ function App() {
     }
     setLastInvToast({ invoiceNo: no, client: effectiveClient.name, total, inv, paid: invStatus==="Paid" });
     setTimeout(()=>setLastInvToast(null), 6000);
-    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",checkedBy:"",receivedBy:""});
+    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",checkedBy:"",receivedBy:""});
   };
   const saveProd = () => {
     if(!pForm.sku||!pForm.name||!pForm.price){ alert("SKU, Name and Price are required."); return; }
@@ -929,6 +934,13 @@ function App() {
                   <tr><td style={{...td(),borderTop:"none",paddingTop:10,verticalAlign:"top"}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Remarks</div>
                     <div style={{fontSize:13,color:"#333",minHeight:48,whiteSpace:"pre-wrap"}}>{inv?.notes||<span style={{color:"#aaa",fontStyle:"italic"}}>—</span>}</div>
+                    {inv?.noteImages&&inv.noteImages.length>0&&(
+                      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:8}}>
+                        {inv.noteImages.map(img=>(
+                          <img key={img.id} src={img.dataUrl} alt={img.name} style={{maxWidth:160,maxHeight:120,borderRadius:6,border:"1px solid #e5e7eb",objectFit:"contain",display:"block"}}/>
+                        ))}
+                      </div>
+                    )}
                   </td></tr>
                   <tr><td style={{...td(),paddingTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Payment Details</div>
@@ -1468,12 +1480,12 @@ function App() {
       const no="QUO-"+String(qCounter).padStart(4,"0");
       setQCounter(c=>c+1);
       const validUntil = new Date(Date.now()+qValidDays*86400000).toISOString();
-      const quote={ quoteNo:no, date:new Date().toISOString(), validUntil, client:qSelClient, cart:[...qCart], discount:qDiscount, vatOverride:qVatOverride, ewtPct:qEwtPct, ewtAmt:qEwtAmt, subtotal:qSubtotal, vatTotal:qVatTotal, globalDisc:qGlobalDisc, total:qTotal, notes:qNotes, companySnap:{...company}, signatories:{...qSignatories}, status:"Active" };
+      const quote={ quoteNo:no, date:new Date().toISOString(), validUntil, client:qSelClient, cart:[...qCart], discount:qDiscount, vatOverride:qVatOverride, ewtPct:qEwtPct, ewtAmt:qEwtAmt, subtotal:qSubtotal, vatTotal:qVatTotal, globalDisc:qGlobalDisc, total:qTotal, notes:qNotes, noteImages:[...qNoteImages], companySnap:{...company}, signatories:{...qSignatories}, status:"Active" };
       setCurrentQuote(quote);
       setQuoteHistory(h=>[quote,...h]);
       setViewQuote(true);
     };
-    const clearQCart = () => { if(window.confirm("Clear quotation?")){ setQCart([]); setQDiscount(0); setQSelClient(null); setQVatOverride(null); setQEwtPct(0); setQNotes(""); } };
+    const clearQCart = () => { if(window.confirm("Clear quotation?")){ setQCart([]); setQDiscount(0); setQSelClient(null); setQVatOverride(null); setQEwtPct(0); setQNotes(""); setQNoteImages([]); } };
     return (
       <div style={{height:openTabs.length>1?"calc(100vh - 34px)":"100vh",background:"var(--bg)",display:"flex",flexDirection:"column",overflow:"hidden",marginTop:openTabs.length>1?34:0}}>
         {badge&&<div className="save-badge">✅ Saved</div>}
@@ -1659,7 +1671,50 @@ function App() {
               <div style={{display:"flex",gap:12}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:9,fontWeight:800,color:"#fcd34d",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Remarks</div>
-                  <textarea value={qNotes} onChange={e=>setQNotes(e.target.value)} placeholder="Validity, terms, delivery notes…" style={{width:"100%",padding:"8px 10px",background:"var(--bg)",border:"1px solid var(--bb)",borderRadius:5,color:"var(--bt)",fontSize:13,resize:"vertical",minHeight:80}}/>
+                  <textarea value={qNotes} onChange={e=>setQNotes(e.target.value)}
+                    onPaste={e=>{
+                      const items=e.clipboardData?.items||[];
+                      for(let item of items){
+                        if(item.type.startsWith("image/")){
+                          e.preventDefault();
+                          const file=item.getAsFile();
+                          if(!file)continue;
+                          const reader=new FileReader();
+                          reader.onload=ev=>{
+                            setQNoteImages(prev=>[...prev,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:file.name||"pasted-image.png"}]);
+                          };
+                          reader.readAsDataURL(file);
+                          break;
+                        }
+                      }
+                    }}
+                    placeholder="Validity, terms, delivery notes…" style={{width:"100%",padding:"8px 10px",background:"var(--bg)",border:"1px solid var(--bb)",borderRadius:5,color:"var(--bt)",fontSize:13,resize:"vertical",minHeight:60}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",background:"rgba(245,158,11,0.12)",border:"1.5px dashed #f59e0b",borderRadius:6,color:"#fcd34d",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                      📎 Attach Photo
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{
+                        Array.from(e.target.files||[]).forEach(file=>{
+                          const reader=new FileReader();
+                          reader.onload=ev=>{
+                            setQNoteImages(prev=>[...prev,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:file.name}]);
+                          };
+                          reader.readAsDataURL(file);
+                        });
+                        e.target.value="";
+                      }}/>
+                    </label>
+                    <span style={{fontSize:10,color:"var(--bm)"}}>or paste (Ctrl+V) an image above</span>
+                  </div>
+                  {qNoteImages.length>0&&(
+                    <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:8}}>
+                      {qNoteImages.map(img=>(
+                        <div key={img.id} style={{position:"relative",display:"inline-block"}}>
+                          <img src={img.dataUrl} alt={img.name} style={{maxWidth:120,maxHeight:90,borderRadius:6,border:"2px solid #f59e0b",objectFit:"cover",display:"block"}}/>
+                          <button onClick={()=>setQNoteImages(prev=>prev.filter(x=>x.id!==img.id))} style={{position:"absolute",top:-6,right:-6,width:18,height:18,background:"#ef4444",border:"none",borderRadius:"50%",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,fontWeight:700}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{width:210,flexShrink:0,fontSize:11}}>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid var(--brand-border)",color:"var(--bm)"}}><span>Subtotal</span><span style={{fontWeight:600,color:"var(--bt)"}}>{peso(qSubtotal)}</span></div>
@@ -1682,7 +1737,7 @@ function App() {
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:10}}>
-                <button onClick={()=>{if(qCart.length===0||window.confirm("Start a new quotation?")){ setQCart([]);setQDiscount(0);setQSelClient(null);setQVatOverride(null);setQEwtPct(0);setQNotes(""); }}} style={{flex:1,padding:"8px 0",background:"rgba(245,158,11,0.12)",border:"1.5px solid #f59e0b",borderRadius:7,color:"#fcd34d",fontWeight:700,cursor:"pointer",fontSize:12}}>✚ New Quote</button>
+                <button onClick={()=>{if(qCart.length===0||window.confirm("Start a new quotation?")){ setQCart([]);setQDiscount(0);setQSelClient(null);setQVatOverride(null);setQEwtPct(0);setQNotes("");setQNoteImages([]); }}} style={{flex:1,padding:"8px 0",background:"rgba(245,158,11,0.12)",border:"1.5px solid #f59e0b",borderRadius:7,color:"#fcd34d",fontWeight:700,cursor:"pointer",fontSize:12}}>✚ New Quote</button>
                 <button onClick={clearQCart} style={{flex:1,padding:"8px 0",background:"rgba(255,255,255,0.05)",border:"1.5px solid var(--brand-border)",borderRadius:7,color:"var(--bm)",fontWeight:700,cursor:"pointer",fontSize:12}}>🗑 Clear</button>
                 <button onClick={handleSaveQuote} disabled={qCart.length===0||!qSelClient} style={{flex:2,padding:"8px 0",background:(qCart.length===0||!qSelClient)?"#1e293b":"linear-gradient(135deg,#d97706,#f59e0b)",border:"none",borderRadius:7,color:(qCart.length===0||!qSelClient)?"#475569":"#1a1560",fontWeight:800,cursor:(qCart.length===0||!qSelClient)?"not-allowed":"pointer",fontSize:13,boxShadow:(qCart.length===0||!qSelClient)?"none":"0 2px 12px rgba(245,158,11,0.4)"}}>📄 Preview & Save Quote</button>
               </div>
@@ -1798,6 +1853,13 @@ function App() {
                   <tr><td style={{...td(),borderTop:"none",paddingTop:10,verticalAlign:"top"}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Notes / Terms</div>
                     <div style={{fontSize:11,color:"#333",minHeight:48,whiteSpace:"pre-wrap"}}>{q.notes||<span style={{color:"#aaa",fontStyle:"italic"}}>—</span>}</div>
+                    {q.noteImages&&q.noteImages.length>0&&(
+                      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:8}}>
+                        {q.noteImages.map(img=>(
+                          <img key={img.id} src={img.dataUrl} alt={img.name} style={{maxWidth:160,maxHeight:120,borderRadius:6,border:"1px solid #e5e7eb",objectFit:"contain",display:"block"}}/>
+                        ))}
+                      </div>
+                    )}
                   </td></tr>
                   <tr><td style={{...td(),paddingTop:10}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Payment Details</div>
@@ -2542,12 +2604,12 @@ function App() {
         discount:joDiscount, vatOverride:joVatOverride,
         subtotal:joSubtotal, vatTotal:joVatTotal, globalDisc:joGlobalDisc, total:joTotal,
         downpayment:joDP, balance:joBalance,
-        paymentMode:joPayMode, paymentTerms:joPayTerms, notes:joNotes, status:joStatus,
+        paymentMode:joPayMode, paymentTerms:joPayTerms, notes:joNotes, noteImages:[...joNoteImages], status:joStatus,
         companySnap:{...company}
       };
       setJoHistory(h=>[jo,...h]);
       showBadge();
-      setJoCart([]); setJoSelClient(null); setJoClientName(''); setJoNotes('');
+      setJoCart([]); setJoSelClient(null); setJoClientName(''); setJoNotes(''); setJoNoteImages([]);
       setJoDeadline(''); setJoDiscount(0); setJoVatOverride(null);
       setJoDownpayment(''); setJoPayMode('Cash'); setJoPayTerms('COD'); setJoStatus('Pending');
       setLastInvToast({invoiceNo:no, client:effectiveClient.name, total:joTotal, inv:null, isJo:true});
@@ -2774,7 +2836,26 @@ function App() {
               <div style={{display:"flex",gap:8}}>
                 <div style={{flex:1,minWidth:120}}>
                   <div style={{fontSize:9,fontWeight:800,color:"#7c3aed",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Notes</div>
-                  <textarea value={joNotes} onChange={e=>setJoNotes(e.target.value)} placeholder="Instructions, materials…" style={{width:"100%",padding:"4px 6px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:54}}/>
+                  <textarea value={joNotes} onChange={e=>setJoNotes(e.target.value)}
+                    onPaste={e=>{const items=e.clipboardData?.items||[];for(let it of items){if(it.type.startsWith("image/")){e.preventDefault();const f=it.getAsFile();if(!f)continue;const r=new FileReader();r.onload=ev=>setJoNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name||"image.png"}]);r.readAsDataURL(f);break;}}}}
+                    placeholder="Instructions, materials…" style={{width:"100%",padding:"4px 6px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:36}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",background:"#f3e8ff",border:"1.5px dashed #7c3aed",borderRadius:5,color:"#6d28d9",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                      📎 Photo
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{Array.from(e.target.files||[]).forEach(f=>{const r=new FileReader();r.onload=ev=>setJoNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name}]);r.readAsDataURL(f);});e.target.value="";}}/>
+                    </label>
+                    <span style={{fontSize:9,color:"#94a3b8"}}>or paste (Ctrl+V)</span>
+                  </div>
+                  {joNoteImages.length>0&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                      {joNoteImages.map(img=>(
+                        <div key={img.id} style={{position:"relative"}}>
+                          <img src={img.dataUrl} alt={img.name} style={{width:48,height:48,borderRadius:4,border:"2px solid #7c3aed",objectFit:"cover",display:"block"}}/>
+                          <button onClick={()=>setJoNoteImages(p=>p.filter(x=>x.id!==img.id))} style={{position:"absolute",top:-5,right:-5,width:14,height:14,background:"#ef4444",border:"none",borderRadius:"50%",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,fontWeight:700,padding:0}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{width:200,flexShrink:0,fontSize:11}}>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid #c0cfe8",color:"#555",fontSize:10}}><span>Subtotal</span><span style={{fontWeight:700,color:"#111"}}>{peso(joSubtotal)}</span></div>
@@ -2809,7 +2890,7 @@ function App() {
                 </div>
               </div>
               <div style={{display:"flex",gap:6,marginTop:6}}>
-                <button onClick={()=>{setJoCart([]);setJoSelClient(null);setJoClientName('');setJoNotes('');setJoDeadline('');setJoDiscount(0);setJoVatOverride(null);setJoDownpayment('');setJoPayMode('Cash');setJoPayTerms('COD');setJoStatus('Pending');}} style={{flex:1,padding:"7px 0",background:"#f1f5f9",border:"1.5px solid #cbd5e1",borderRadius:7,color:"#64748b",fontWeight:700,cursor:"pointer",fontSize:12}}>🗑 Clear</button>
+                <button onClick={()=>{setJoCart([]);setJoSelClient(null);setJoClientName('');setJoNotes('');setJoNoteImages([]);setJoDeadline('');setJoDiscount(0);setJoVatOverride(null);setJoDownpayment('');setJoPayMode('Cash');setJoPayTerms('COD');setJoStatus('Pending');}} style={{flex:1,padding:"7px 0",background:"#f1f5f9",border:"1.5px solid #cbd5e1",borderRadius:7,color:"#64748b",fontWeight:700,cursor:"pointer",fontSize:12}}>🗑 Clear</button>
                 <button onClick={handleSaveJo} disabled={joCart.length===0||(!joSelClient&&!joClientName.trim())||!joDeadline} style={{flex:3,padding:"7px 0",background:(joCart.length===0||(!joSelClient&&!joClientName.trim())||!joDeadline)?"#e2e8f0":"linear-gradient(135deg,#4c1d95,#7c3aed)",border:"none",borderRadius:7,color:(joCart.length===0||(!joSelClient&&!joClientName.trim())||!joDeadline)?"#94a3b8":"#fff",fontWeight:800,cursor:(joCart.length===0||(!joSelClient&&!joClientName.trim())||!joDeadline)?"not-allowed":"pointer",fontSize:13}}>🔧 Save Job Order</button>
               </div>
             </div>
@@ -3340,13 +3421,13 @@ function App() {
     const savePo=()=>{
       if(!poSupplier.name.trim()){alert("Enter supplier name.");return;}
       if(poCart.length===0){alert("Add at least one item.");return;}
-      const po={poNo,date:new Date().toISOString(),deliveryDate:poDeliveryDate,supplier:{...poSupplier},items:[...poCart],subtotal:poSubtotal,total:poTotal,notes:poNotes,status:poStatus,companySnap:{...company}};
+      const po={poNo,date:new Date().toISOString(),deliveryDate:poDeliveryDate,supplier:{...poSupplier},items:[...poCart],subtotal:poSubtotal,total:poTotal,notes:poNotes,noteImages:[...poNoteImages],status:poStatus,companySnap:{...company}};
       setPoHistory(h=>[po,...h]);
       setPoCounter(c=>c+1);
       setCurrentPo(po);setViewPo(true);
       showBadge();
     };
-    const clearPo=()=>{setPoCart([]);setPoSupplier({name:'',address:'',contact:'',tin:''});setPoNotes('');setPoDeliveryDate('');setPoStatus('Draft');};
+    const clearPo=()=>{setPoCart([]);setPoSupplier({name:'',address:'',contact:'',tin:''});setPoNotes('');setPoNoteImages([]);setPoDeliveryDate('');setPoStatus('Draft');};
     const addPoLine=()=>setPoCart(p=>[...p,{id:'pol_'+Date.now(),description:'',qty:1,unit:'piece',price:0,note:''}]);
     return(
       <>
@@ -3423,7 +3504,26 @@ function App() {
               <div style={{display:"flex",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:9,fontWeight:800,color:"#166534",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Notes / Terms</div>
-                  <textarea value={poNotes} onChange={e=>setPoNotes(e.target.value)} placeholder="Delivery instructions, payment terms, special requirements…" style={{width:"100%",padding:"5px 7px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:52}}/>
+                  <textarea value={poNotes} onChange={e=>setPoNotes(e.target.value)}
+                    onPaste={e=>{const items=e.clipboardData?.items||[];for(let it of items){if(it.type.startsWith("image/")){e.preventDefault();const f=it.getAsFile();if(!f)continue;const r=new FileReader();r.onload=ev=>setPoNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name||"image.png"}]);r.readAsDataURL(f);break;}}}}
+                    placeholder="Delivery instructions, payment terms, special requirements…" style={{width:"100%",padding:"5px 7px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:36}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",background:"#dcfce7",border:"1.5px dashed #166534",borderRadius:5,color:"#15803d",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                      📎 Photo
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{Array.from(e.target.files||[]).forEach(f=>{const r=new FileReader();r.onload=ev=>setPoNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name}]);r.readAsDataURL(f);});e.target.value="";}}/>
+                    </label>
+                    <span style={{fontSize:9,color:"#94a3b8"}}>or paste (Ctrl+V)</span>
+                  </div>
+                  {poNoteImages.length>0&&(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                      {poNoteImages.map(img=>(
+                        <div key={img.id} style={{position:"relative"}}>
+                          <img src={img.dataUrl} alt={img.name} style={{width:48,height:48,borderRadius:4,border:"2px solid #166534",objectFit:"cover",display:"block"}}/>
+                          <button onClick={()=>setPoNoteImages(p=>p.filter(x=>x.id!==img.id))} style={{position:"absolute",top:-5,right:-5,width:14,height:14,background:"#ef4444",border:"none",borderRadius:"50%",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,fontWeight:700,padding:0}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div style={{width:200,flexShrink:0,fontSize:11}}>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #c0cfe8",color:"#555"}}><span>Subtotal</span><span style={{fontWeight:700,color:"#111"}}>{peso(poSubtotal)}</span></div>
@@ -4791,10 +4891,29 @@ function App() {
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:9,fontWeight:800,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>Notes</div>
-                <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Delivery notes, instructions…" style={{width:"100%",padding:"4px 6px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:40}}/>
+                <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+                  onPaste={e=>{const items=e.clipboardData?.items||[];for(let it of items){if(it.type.startsWith("image/")){e.preventDefault();const f=it.getAsFile();if(!f)continue;const r=new FileReader();r.onload=ev=>setInvNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name||"image.png"}]);r.readAsDataURL(f);break;}}}}
+                  placeholder="Delivery notes, instructions…" style={{width:"100%",padding:"4px 6px",background:"#fff",border:"1px solid #c0cfe8",borderRadius:5,color:"#333",fontSize:10,resize:"none",height:36}}/>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",background:"#eef2ff",border:"1.5px dashed #6366f1",borderRadius:5,color:"#4338ca",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                    📎 Photo
+                    <input type="file" accept="image/*" multiple style={{display:"none"}} onChange={e=>{Array.from(e.target.files||[]).forEach(f=>{const r=new FileReader();r.onload=ev=>setInvNoteImages(p=>[...p,{id:"img_"+Date.now()+"_"+Math.random().toString(36).slice(2,6),dataUrl:ev.target.result,name:f.name}]);r.readAsDataURL(f);});e.target.value="";}}/>
+                  </label>
+                  <span style={{fontSize:9,color:"#94a3b8"}}>or paste image (Ctrl+V)</span>
+                </div>
+                {invNoteImages.length>0&&(
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                    {invNoteImages.map(img=>(
+                      <div key={img.id} style={{position:"relative"}}>
+                        <img src={img.dataUrl} alt={img.name} style={{width:48,height:48,borderRadius:4,border:"2px solid #6366f1",objectFit:"cover",display:"block"}}/>
+                        <button onClick={()=>setInvNoteImages(p=>p.filter(x=>x.id!==img.id))} style={{position:"absolute",top:-5,right:-5,width:14,height:14,background:"#ef4444",border:"none",borderRadius:"50%",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,fontWeight:700,padding:0}}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:5,justifyContent:"flex-end"}}>
-                <button onClick={()=>{if(cart.length===0||window.confirm("Start a new invoice?")){setCart([]);setDiscount(0);setSelClient(null);setVatOverride(null);setEwtPct(0);setNotes("");setOtherCharges([]);}}} style={{padding:"5px 12px",background:"#dcfce7",border:"1.5px solid #22c55e",borderRadius:6,color:"#15803d",fontWeight:700,cursor:"pointer",fontSize:11}}>✚ New</button>
+                <button onClick={()=>{if(cart.length===0||window.confirm("Start a new invoice?")){setCart([]);setDiscount(0);setSelClient(null);setVatOverride(null);setEwtPct(0);setNotes("");setInvNoteImages([]);setOtherCharges([]);}}} style={{padding:"5px 12px",background:"#dcfce7",border:"1.5px solid #22c55e",borderRadius:6,color:"#15803d",fontWeight:700,cursor:"pointer",fontSize:11}}>✚ New</button>
                 <button onClick={clearCart} style={{padding:"5px 12px",background:"#f1f5f9",border:"1.5px solid #cbd5e1",borderRadius:6,color:"#64748b",fontWeight:700,cursor:"pointer",fontSize:11}}>🗑 Clear</button>
                 <button onClick={handlePrint} disabled={cart.length===0||(!selClient&&!cashCustomerName.trim())} style={{padding:"7px 14px",background:(cart.length===0||(!selClient&&!cashCustomerName.trim()))?"#e2e8f0":"#2d2080",border:"none",borderRadius:6,color:(cart.length===0||(!selClient&&!cashCustomerName.trim()))?"#94a3b8":"#fff",fontWeight:800,cursor:(cart.length===0||(!selClient&&!cashCustomerName.trim()))?"not-allowed":"pointer",fontSize:12}}>💾 Save Invoice</button>
               </div>

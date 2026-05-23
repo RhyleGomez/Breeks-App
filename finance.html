@@ -41,6 +41,76 @@ select option{background:#1e293b;color:#f1f5f9;}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--surface);}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+@media print {
+  .no-print { display: none !important; }
+  #proj-preview-root { position:static !important; }
+
+  @page { margin: 18mm 14mm; size: A4; }
+  body { background: #fff !important; color: #111 !important; }
+  #root > div > div:first-child { display: none !important; } /* hide nav header */
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .proj-print-area { display: block !important; }
+  /* Reset dark surfaces to white */
+  .proj-card-print {
+    background: #fff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+    color: #111 !important;
+  }
+  .proj-card-print * { color: inherit !important; }
+  .proj-card-print .proj-hdr {
+    background: #f8fafc !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    padding: 10px 14px !important;
+  }
+  .proj-card-print .proj-financials {
+    background: #f8fafc !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+  .proj-card-print .proj-fin-cell {
+    border-right: 1px solid #e2e8f0 !important;
+    padding: 8px 12px !important;
+  }
+  .proj-card-print .proj-items { padding: 10px 14px !important; }
+  .proj-card-print .proj-item-row { font-size: 11px !important; color: #334155 !important; }
+  .proj-print-header {
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #0a0820;
+  }
+  .proj-print-header .co-name { font-size: 20px; font-weight: 900; color: #0a0820 !important; }
+  .proj-print-header .co-tag  { font-size: 11px; color: #475569 !important; }
+  .proj-print-header .rpt-title { font-size: 14px; font-weight: 800; color: #334155 !important; margin-top: 4px; }
+  .proj-summary-bar {
+    display: grid !important;
+    grid-template-columns: repeat(4,1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .proj-summary-bar .sum-cell {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #f8fafc !important;
+  }
+  .proj-summary-bar .sum-cell .sum-label { font-size: 9px; color: #64748b !important; text-transform: uppercase; letter-spacing: .5px; }
+  .proj-summary-bar .sum-cell .sum-val   { font-size: 16px; font-weight: 900; color: #0a0820 !important; }
+  /* Status badge colours */
+  .badge-active    { background: #fef3c7 !important; color: #92400e !important; }
+  .badge-completed { background: #dcfce7 !important; color: #166534 !important; }
+  .badge-cancelled { background: #fee2e2 !important; color: #991b1b !important; }
+  /* profit/loss colours */
+  .clr-profit { color: #15803d !important; }
+  .clr-loss   { color: #b91c1c !important; }
+  .clr-sale   { color: #1e40af !important; }
+  .clr-cost   { color: #b91c1c !important; }
+  .clr-margin { color: #15803d !important; }
+  .clr-muted  { color: #475569 !important; }
+}
 </style>
 </head>
 <body>
@@ -506,6 +576,7 @@ function App(){
   const[view,setView]=useState('dashboard');
   const[activeTab,setActiveTab]=useState('business');
   const[projects,setProjects]=useLS('fin2_projects',[]);
+  const[suppliers,setSuppliers]=useLS('fin2_suppliers',[]);
 
   // Scroll refs live at App level so they survive PanelJournal re-renders
   const journalScrollRef=React.useRef(null);
@@ -3461,6 +3532,324 @@ function App(){
   if(locked) return <LockScreen onUnlock={()=>setLocked(false)}/>;
 
   // ── PROJECTS VIEW ────────────────────────────────────────────────────────
+  // ── SUPPLIERS VIEW ──────────────────────────────────────────────────────────
+  const SuppliersView=()=>{
+    const[filterStatus,setFilterStatus]=React.useState('All');
+    const[showForm,setShowForm]=React.useState(false);
+    const[editId,setEditId]=React.useState(null);
+    const[preview,setPreview]=React.useState(null);
+    const emptySupEntry=()=>({
+      id:'',date:today(),supplier:'',item:'',qty:'',unit:'pcs',
+      unitCost:'',totalAmount:'',paymentMethod:'Cash',
+      status:'Unpaid',refNo:'',dueDate:'',notes:''
+    });
+    const[form,setForm]=React.useState(emptySupEntry());
+
+    const UNITS=['pcs','sqm','sqft','meters','rolls','hrs','days','set','lot','kg','liter'];
+    const PAYMENT_METHODS=['Cash','GCash','Bank Transfer','Credit','Cheque','BillEase','Other'];
+    const STATUSES=['Unpaid','Paid','Partial'];
+    const STATUS_COLOR={Paid:'#22c55e',Unpaid:'#ef4444',Partial:'#f59e0b'};
+    const STATUS_BG={Paid:'rgba(34,197,94,.12)',Unpaid:'rgba(239,68,68,.1)',Partial:'rgba(245,158,11,.1)'};
+
+    const calcTotal=f=>{
+      if(f.totalAmount&&parseFloat(f.totalAmount)>0) return parseFloat(f.totalAmount);
+      return (parseFloat(f.qty)||0)*(parseFloat(f.unitCost)||0);
+    };
+
+    const openNew=()=>{setForm(emptySupEntry());setEditId(null);setShowForm(true);};
+    const openEdit=(e)=>{setForm({...e});setEditId(e.id);setShowForm(true);};
+    const deleteEntry=(id)=>{if(window.confirm('Delete this supplier entry?'))setSuppliers(prev=>prev.filter(s=>s.id!==id));showBadge();};
+    const save=()=>{
+      if(!form.supplier){alert('Enter supplier name.');return;}
+      if(!form.item){alert('Enter item/description.');return;}
+      const entry={...form,id:editId||'sup_'+Date.now(),totalAmount:calcTotal(form)};
+      if(editId) setSuppliers(prev=>prev.map(s=>s.id===editId?entry:s));
+      else setSuppliers(prev=>[entry,...prev]);
+      setShowForm(false);showBadge();
+    };
+
+    const filtered=filterStatus==='All'?suppliers:suppliers.filter(s=>s.status===filterStatus);
+    const totalUnpaid=suppliers.filter(s=>s.status==='Unpaid').reduce((a,s)=>a+(parseFloat(s.totalAmount)||0),0);
+    const totalPaid=suppliers.filter(s=>s.status==='Paid').reduce((a,s)=>a+(parseFloat(s.totalAmount)||0),0);
+    const totalPartial=suppliers.filter(s=>s.status==='Partial').reduce((a,s)=>a+(parseFloat(s.totalAmount)||0),0);
+    const grandTotal=suppliers.reduce((a,s)=>a+(parseFloat(s.totalAmount)||0),0);
+
+    // ── PREVIEW ──────────────────────────────────────────────────────────────
+    if(preview){
+      const s=preview;
+      const coName=company&&company.name?company.name:'BREEKS';
+      const coTag=company&&company.tagline?company.tagline:'Digital Marketing Services';
+      return(
+        <div style={{position:'fixed',inset:0,background:'#fff',zIndex:999,overflowY:'auto',fontFamily:"'Segoe UI',Arial,sans-serif",color:'#111'}}>
+          {/* Toolbar */}
+          <div className="no-print" style={{position:'sticky',top:0,background:'#1e1b4b',borderBottom:'2px solid #312e81',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,zIndex:10}}>
+            <button onClick={()=>setPreview(null)}
+              style={{padding:'7px 16px',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+              ← Back
+            </button>
+            <div style={{flex:1,fontSize:13,fontWeight:700,color:'#c7d2fe'}}>🏪 {s.supplier} — {s.item}</div>
+            <button onClick={()=>window.print()}
+              style={{padding:'7px 16px',background:'#7c3aed',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+              🖨️ Print
+            </button>
+          </div>
+          {/* Content */}
+          <div style={{maxWidth:720,margin:'0 auto',padding:'28px 20px'}}>
+            <div style={{marginBottom:20,paddingBottom:12,borderBottom:'2px solid #0a0820',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:900,color:'#0a0820'}}>{coName}</div>
+                <div style={{fontSize:11,color:'#475569'}}>{coTag}</div>
+                <div style={{fontSize:14,fontWeight:800,color:'#334155',marginTop:4}}>🏪 Supplier Purchase Entry</div>
+              </div>
+              <div style={{textAlign:'right',fontSize:11,color:'#475569'}}>
+                <div>{fmt(s.date)}</div>
+                {s.refNo&&<div>Ref: {s.refNo}</div>}
+              </div>
+            </div>
+            {/* Details card */}
+            <div style={{border:'1.5px solid #cbd5e1',borderRadius:10,overflow:'hidden',marginBottom:20}}>
+              <div style={{background:'#f8fafc',borderBottom:'1px solid #cbd5e1',padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:900,color:'#0a0820',marginBottom:4}}>{s.supplier}</div>
+                  <div style={{fontSize:12,color:'#475569'}}>{s.item}</div>
+                </div>
+                <span style={{fontSize:11,padding:'4px 14px',borderRadius:20,background:STATUS_BG[s.status],color:STATUS_COLOR[s.status],fontWeight:700,border:`1px solid ${STATUS_COLOR[s.status]}44`}}>{s.status}</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}}>
+                {[
+                  ['Date',fmt(s.date)],
+                  ['Payment Method',s.paymentMethod],
+                  ['Qty / Unit',s.qty?(s.qty+' '+s.unit):'—'],
+                  ['Unit Cost',s.unitCost?peso(s.unitCost):'—'],
+                  ['Due Date',s.dueDate?fmt(s.dueDate):'—'],
+                  ['Ref / Receipt No.',s.refNo||'—'],
+                ].map(([l,v],i)=>(
+                  <div key={l} style={{padding:'10px 16px',borderBottom:'1px solid #f1f5f9',borderRight:i%2===0?'1px solid #f1f5f9':'none'}}>
+                    <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:.5,color:'#64748b',marginBottom:2}}>{l}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:'#1e293b'}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {s.notes&&<div style={{padding:'10px 16px',borderTop:'1px solid #f1f5f9',fontSize:11,color:'#64748b',fontStyle:'italic'}}>Notes: {s.notes}</div>}
+              <div style={{background:'#f8fafc',borderTop:'1px solid #cbd5e1',padding:'14px 16px',display:'flex',justifyContent:'flex-end',alignItems:'center',gap:12}}>
+                <div style={{fontSize:12,color:'#475569'}}>Total Amount</div>
+                <div style={{fontSize:24,fontWeight:900,color:'#1e40af'}}>{peso(s.totalAmount)}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8',borderTop:'1px solid #e2e8f0',paddingTop:8}}>
+              <span>{coName} — Supplier Purchase Record</span><span>Generated by BREEKS Finance</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return(
+      <div style={{padding:16,height:'calc(100vh - 105px)',overflowY:'auto',boxSizing:'border-box'}}>
+        {/* Header */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:900,color:'#f1f5f9'}}>🏪 Supplier Purchases</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>Track all purchases from suppliers</div>
+          </div>
+          <button onClick={openNew}
+            style={{padding:'8px 18px',background:'var(--cyan)',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13}}>
+            ＋ New Entry
+          </button>
+        </div>
+
+        {/* Summary cards */}
+        {suppliers.length>0&&(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16}}>
+            {[
+              ['Total Purchases',peso(grandTotal),'#00c4d4','🏪'],
+              ['Unpaid',peso(totalUnpaid),'#ef4444','🔴'],
+              ['Partial',peso(totalPartial),'#f59e0b','🟡'],
+              ['Paid',peso(totalPaid),'#22c55e','✅'],
+            ].map(([l,v,color,ic])=>(
+              <div key={l} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+                <div style={{fontSize:18,marginBottom:4}}>{ic}</div>
+                <div style={{fontSize:11,color:'var(--muted)',marginBottom:2}}>{l}</div>
+                <div style={{fontSize:15,fontWeight:900,color}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Filter tabs */}
+        <div style={{display:'flex',gap:8,marginBottom:16}}>
+          {['All','Unpaid','Partial','Paid'].map(s=>(
+            <button key={s} onClick={()=>setFilterStatus(s)}
+              style={{padding:'5px 14px',border:`1px solid ${filterStatus===s?'var(--cyan)':'var(--border)'}`,borderRadius:20,
+                background:filterStatus===s?'rgba(0,196,212,.12)':'transparent',
+                color:filterStatus===s?'var(--cyan)':'var(--muted)',fontWeight:filterStatus===s?700:500,
+                cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Entries list */}
+        {filtered.length===0?(
+          <div style={{textAlign:'center',padding:'60px 20px',color:'var(--muted)'}}>
+            <div style={{fontSize:40,marginBottom:12}}>🏪</div>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>No supplier entries yet</div>
+            <div style={{fontSize:12}}>Click ＋ New Entry to record your first purchase</div>
+          </div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {filtered.map(s=>(
+              <div key={s.id} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}}>
+                      <span style={{fontSize:13,fontWeight:900,color:'#f1f5f9'}}>{s.supplier}</span>
+                      <span style={{fontSize:9,padding:'2px 8px',borderRadius:10,background:STATUS_BG[s.status],color:STATUS_COLOR[s.status],fontWeight:700}}>{s.status}</span>
+                      <span style={{fontSize:9,padding:'2px 8px',borderRadius:10,background:'rgba(100,116,139,.15)',color:'#94a3b8',fontWeight:600}}>{s.paymentMethod}</span>
+                    </div>
+                    <div style={{fontSize:12,color:'#cbd5e1',marginBottom:2}}>{s.item}</div>
+                    <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+                      {s.qty&&<span style={{fontSize:10,color:'var(--muted)'}}>{s.qty} {s.unit}</span>}
+                      {s.refNo&&<span style={{fontSize:10,color:'var(--muted)'}}>Ref: {s.refNo}</span>}
+                      {s.dueDate&&<span style={{fontSize:10,color:s.status!=='Paid'&&s.dueDate<today()?'#ef4444':'var(--muted)'}}>Due: {fmt(s.dueDate)}</span>}
+                      <span style={{fontSize:10,color:'var(--muted)'}}>{fmt(s.date)}</span>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,marginLeft:12}}>
+                    <div style={{fontSize:16,fontWeight:900,color:'#00c4d4'}}>{peso(s.totalAmount)}</div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>setPreview(s)} style={{padding:'4px 10px',background:'rgba(59,130,246,.1)',border:'1px solid #3b82f6',borderRadius:6,color:'#60a5fa',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>👁 View</button>
+                      <button onClick={()=>openEdit(s)} style={{padding:'4px 10px',background:'rgba(0,196,212,.1)',border:'1px solid var(--cyan)',borderRadius:6,color:'var(--cyan)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>✏️</button>
+                      <button onClick={()=>deleteEntry(s.id)} style={{padding:'4px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:10,fontFamily:'inherit'}}>🗑</button>
+                    </div>
+                    {/* Quick status toggle */}
+                    {s.status!=='Paid'&&(
+                      <button onClick={()=>{setSuppliers(prev=>prev.map(x=>x.id===s.id?{...x,status:'Paid'}:x));showBadge();}}
+                        style={{padding:'3px 10px',background:'rgba(34,197,94,.1)',border:'1px solid #22c55e',borderRadius:6,color:'#22c55e',cursor:'pointer',fontSize:9,fontWeight:700,fontFamily:'inherit'}}>
+                        ✓ Mark Paid
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add/Edit Modal */}
+        {showForm&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.65)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+            onClick={e=>e.target===e.currentTarget&&setShowForm(false)}>
+            <div style={{background:'var(--surface)',borderRadius:14,padding:24,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto',border:'1px solid var(--border)'}}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+                <div style={{fontWeight:900,fontSize:15,color:'#f1f5f9'}}>🏪 {editId?'Edit':'New'} Supplier Entry</div>
+                <button onClick={()=>setShowForm(false)} style={{background:'var(--surface2)',border:'1px solid var(--border)',color:'var(--muted)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:14}}>✕</button>
+              </div>
+
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                {/* Date */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Date *</div>
+                  <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Supplier */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Supplier Name *</div>
+                  <input defaultValue={form.supplier} onBlur={e=>setForm(f=>({...f,supplier:e.target.value}))}
+                    placeholder="e.g. ABC Supplies"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Item */}
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Item / Description *</div>
+                  <input defaultValue={form.item} onBlur={e=>setForm(f=>({...f,item:e.target.value}))}
+                    placeholder="e.g. Tarpaulin 4x8ft, Ink Black 1L"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Qty */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Qty</div>
+                  <div style={{display:'flex',gap:6}}>
+                    <input type="number" defaultValue={form.qty||''} onBlur={e=>setForm(f=>({...f,qty:e.target.value}))}
+                      placeholder="0"
+                      style={{flex:1,padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                    <select value={form.unit} onChange={e=>setForm(f=>({...f,unit:e.target.value}))}
+                      style={{width:80,padding:'8px 6px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                      {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Unit Cost */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Unit Cost (₱)</div>
+                  <input type="number" defaultValue={form.unitCost||''} onBlur={e=>setForm(f=>({...f,unitCost:e.target.value}))}
+                    placeholder="0.00"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Total Amount */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Total Amount (₱) <span style={{color:'#475569',fontSize:9}}>(overrides qty×cost)</span></div>
+                  <input type="number" defaultValue={form.totalAmount||''} onBlur={e=>setForm(f=>({...f,totalAmount:e.target.value}))}
+                    placeholder="0.00"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Payment Method */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Payment Method</div>
+                  <select value={form.paymentMethod} onChange={e=>setForm(f=>({...f,paymentMethod:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit',cursor:'pointer'}}>
+                    {PAYMENT_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                {/* Status */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Status</div>
+                  <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit',cursor:'pointer'}}>
+                    {STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {/* Due Date */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Due Date / Terms</div>
+                  <input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))}
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Ref No */}
+                <div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Receipt / Ref No.</div>
+                  <input defaultValue={form.refNo} onBlur={e=>setForm(f=>({...f,refNo:e.target.value}))}
+                    placeholder="e.g. OR-2025-001"
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+                {/* Notes */}
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Notes</div>
+                  <input defaultValue={form.notes} onBlur={e=>setForm(f=>({...f,notes:e.target.value}))}
+                    placeholder="Additional notes..."
+                    style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+                </div>
+              </div>
+
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <button onClick={()=>setShowForm(false)}
+                  style={{padding:'8px 18px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:8,color:'var(--muted)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>
+                  Cancel
+                </button>
+                <button onClick={save}
+                  style={{padding:'8px 20px',background:'var(--cyan)',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+                  💾 Save Entry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ProjectsView=()=>{
     const[filter,setFilter]=React.useState('All');
     // Use App-level state to prevent form reset on re-render
@@ -3492,9 +3881,139 @@ function App(){
     const STATUSES=['Active','Completed','Cancelled'];
     const ITEM_CATS=['Material','Labor','Freight','Other'];
 
+    // ── PROJECT PREVIEW (in-app) ───────────────────────────────────────────────
+    const[projPreview,setProjPreview]=React.useState(null); // {project}
+
+    const viewOne=(p)=>setProjPreview(p);
+    const printOne=(p)=>{setProjPreview({...p,_autoPrint:true});};
+
     const filtered=filter==='All'?projects:projects.filter(p=>p.status===filter);
 
     const statusColor=(s)=>s==='Completed'?'#22c55e':s==='Cancelled'?'#ef4444':'#f59e0b';
+
+    // Auto-print effect
+    React.useEffect(()=>{
+      if(projPreview&&projPreview._autoPrint){
+        const t=setTimeout(()=>window.print(),600);
+        return()=>clearTimeout(t);
+      }
+    },[projPreview]);
+
+    // ── IN-APP PROJECT PREVIEW ─────────────────────────────────────────────────
+    if(projPreview){
+      const p=projPreview;
+      const cost=p.items?p.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.unitCost)||0),0):0;
+      const sale=parseFloat(p.salePrice)||0;
+      const prof=sale-cost;
+      const mgn=sale>0?((prof/sale)*100):0;
+      const isProfit=prof>=0;
+      const statusColor2=(s)=>s==='Completed'?'#166534':s==='Cancelled'?'#991b1b':'#92400e';
+      const statusBg=(s)=>s==='Completed'?'#dcfce7':s==='Cancelled'?'#fee2e2':'#fef3c7';
+      const coName=company&&company.name?company.name:'BREEKS';
+      const coTag=company&&company.tagline?company.tagline:'Digital Marketing Services';
+      return(
+        <div id="proj-preview-root" style={{position:'fixed',inset:0,background:'#fff',zIndex:999,overflowY:'auto',fontFamily:"'Segoe UI',Arial,sans-serif",color:'#111'}}>
+          {/* Toolbar */}
+          <div className="no-print" style={{position:'sticky',top:0,background:'#1e1b4b',borderBottom:'2px solid #312e81',padding:'10px 16px',display:'flex',alignItems:'center',gap:12,zIndex:10}}>
+            <button onClick={()=>setProjPreview(null)}
+              style={{padding:'7px 16px',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.2)',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+              ← Back
+            </button>
+            <div style={{flex:1,fontSize:13,fontWeight:700,color:'#c7d2fe'}}>📐 {p.name}</div>
+            <button onClick={()=>window.print()}
+              style={{padding:'7px 16px',background:'#7c3aed',border:'none',borderRadius:8,color:'#fff',fontWeight:800,cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>
+              🖨️ Print
+            </button>
+          </div>
+
+          {/* Preview content */}
+          <div style={{maxWidth:860,margin:'0 auto',padding:'28px 20px'}}>
+            {/* Header */}
+            <div style={{marginBottom:20,paddingBottom:12,borderBottom:'2px solid #0a0820',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:900,color:'#0a0820'}}>{coName}</div>
+                <div style={{fontSize:11,color:'#475569'}}>{coTag}</div>
+                <div style={{fontSize:14,fontWeight:800,color:'#334155',marginTop:4}}>📐 Project Costing Sheet</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:11,color:'#475569'}}>{new Date().toLocaleDateString('en-PH',{day:'2-digit',month:'long',year:'numeric'})}</div>
+              </div>
+            </div>
+
+            {/* Project card */}
+            <div style={{border:'1.5px solid #cbd5e1',borderRadius:10,overflow:'hidden',marginBottom:20}}>
+              {/* Project header */}
+              <div style={{background:'#f8fafc',borderBottom:'1px solid #cbd5e1',padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                    <span style={{fontSize:16,fontWeight:900,color:'#0a0820'}}>{p.name}</span>
+                    <span style={{fontSize:9,padding:'2px 10px',borderRadius:10,background:statusBg(p.status),color:statusColor2(p.status),fontWeight:700}}>{p.status}</span>
+                    <span style={{fontSize:9,padding:'2px 10px',borderRadius:10,background:'#f1f5f9',color:'#475569',fontWeight:600}}>{p.type}</span>
+                  </div>
+                  {p.client&&<div style={{fontSize:12,color:'#475569',marginBottom:2}}>👤 Client: <b>{p.client}</b></div>}
+                  {p.date&&<div style={{fontSize:11,color:'#64748b'}}>📅 {fmt(p.date)}</div>}
+                  {p.notes&&<div style={{fontSize:11,color:'#64748b',marginTop:4,fontStyle:'italic'}}>"{p.notes}"</div>}
+                </div>
+              </div>
+
+              {/* Financial summary */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',borderBottom:'1px solid #e2e8f0'}}>
+                {[
+                  ['Sale Price',peso(sale),'#1e40af'],
+                  ['Total Cost',peso(cost),'#b91c1c'],
+                  ['Profit / Loss',peso(prof),isProfit?'#15803d':'#b91c1c'],
+                  ['Margin',mgn.toFixed(1)+'%',isProfit?'#15803d':'#b91c1c'],
+                ].map(([label,val,color],i)=>(
+                  <div key={label} style={{padding:'12px 16px',borderRight:i<3?'1px solid #e2e8f0':'none'}}>
+                    <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:.5,color:'#64748b',marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:18,fontWeight:900,color}}>{val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Cost breakdown */}
+              {p.items&&p.items.length>0&&(
+                <div style={{padding:'14px 16px'}}>
+                  <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'#64748b',marginBottom:10}}>Cost Breakdown</div>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                    <thead>
+                      <tr style={{borderBottom:'2px solid #e2e8f0',background:'#f8fafc'}}>
+                        {['Description','Qty','Unit Cost','Category','Total'].map(h=>(
+                          <th key={h} style={{padding:'6px 10px',textAlign:h==='Description'||h==='Category'?'left':'right',color:'#475569',fontWeight:700,fontSize:10,textTransform:'uppercase'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.items.map((it,i)=>(
+                        <tr key={i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                          <td style={{padding:'7px 10px',color:'#1e293b'}}>{it.desc||'—'}</td>
+                          <td style={{padding:'7px 10px',textAlign:'right',color:'#475569'}}>{it.qty} {it.unit}</td>
+                          <td style={{padding:'7px 10px',textAlign:'right',color:'#475569'}}>{peso(it.unitCost)}</td>
+                          <td style={{padding:'7px 10px',color:'#64748b',fontSize:10}}>{it.category}</td>
+                          <td style={{padding:'7px 10px',textAlign:'right',fontWeight:700,color:'#0a0820'}}>{peso((it.qty||0)*(it.unitCost||0))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{borderTop:'2px solid #e2e8f0',background:'#f8fafc'}}>
+                        <td colSpan={4} style={{padding:'8px 10px',fontWeight:800,color:'#334155',fontSize:12}}>Total Cost</td>
+                        <td style={{padding:'8px 10px',textAlign:'right',fontWeight:900,fontSize:14,color:'#b91c1c'}}>{peso(cost)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{marginTop:16,paddingTop:8,borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8'}}>
+              <span>{coName} — Project Costing Report</span>
+              <span>Generated by BREEKS Finance</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return(
       <div style={{padding:16,height:'calc(100vh - 105px)',overflowY:'auto',boxSizing:'border-box'}}>
@@ -3571,6 +4090,7 @@ function App(){
                     </div>
                     <div style={{display:'flex',gap:6,marginLeft:12}}>
                       <button onClick={()=>openEdit(p)} style={{padding:'5px 12px',background:'rgba(0,196,212,.1)',border:'1px solid var(--cyan)',borderRadius:6,color:'var(--cyan)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>✏️ Edit</button>
+                      <button onClick={()=>viewOne(p)} style={{padding:'5px 12px',background:'rgba(59,130,246,.1)',border:'1px solid #3b82f6',borderRadius:6,color:'#60a5fa',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>👁 View</button><button onClick={()=>printOne(p)} style={{padding:'5px 12px',background:'rgba(124,58,237,.1)',border:'1px solid #7c3aed',borderRadius:6,color:'#a78bfa',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>🖨️ Print</button>
                       <button onClick={()=>deleteProject(p.id)} style={{padding:'5px 10px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>🗑</button>
                     </div>
                   </div>
@@ -3659,7 +4179,7 @@ function App(){
                 </div>
                 <div>
                   <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Sale Price (₱)</div>
-                  <input type="number" value={form.salePrice||''} onChange={e=>setForm(f=>({...f,salePrice:parseFloat(e.target.value)||0}))}
+                  <input type="number" defaultValue={form.salePrice||''} onBlur={e=>setForm(f=>({...f,salePrice:parseFloat(e.target.value)||0}))} onKeyDown={e=>{if(e.key==='Enter'||e.key==='Tab')setForm(f=>({...f,salePrice:parseFloat(e.target.value)||0}));}}
                     placeholder="0.00"
                     style={{width:'100%',padding:'8px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'#f1f5f9',fontSize:12,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
                 </div>
@@ -3814,6 +4334,7 @@ function App(){
             ['budgets','🎯','Budgets'],
             ['liabilities','📋','Liabilities'],
             ['projects','📐','Projects'],
+            ['suppliers','🏪','Suppliers'],
             ['accounts','🏦','Accounts'],
           ].map(([v,ic,label])=>(
             <button key={v} onClick={()=>setView(v)}
@@ -3838,6 +4359,7 @@ function App(){
       {view==='budgets'&&<BudgetsView/>}
       {view==='liabilities'&&<LiabilitiesView/>}
       {view==='projects'&&<ProjectsView/>}
+      {view==='suppliers'&&<SuppliersView/>}
       {view==='accounts'&&<AccountsView/>}
 
       {/* Add/Edit Entry Modal */}

@@ -1,0 +1,25 @@
+{
+  "name": "Breeks App",
+  "short_name": "Breeks",
+  "description": "Point of Sale & Business Documents",
+  "start_url": "/Breeks-App/",
+  "scope": "/Breeks-App/",
+  "display": "standalone",
+  "background_color": "#0a0820",
+  "theme_color": "#0a0820",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/Breeks-App/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/Breeks-App/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -112,6 +112,7 @@ select option{background:#1e293b;color:#f1f5f9;}
   .clr-muted  { color: #475569 !important; }
 }
 </style>
+<link rel="manifest" href="/Breeks-App/finance-manifest.json"/>
 </head>
 <body>
 <div id="root"></div>
@@ -4800,6 +4801,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
     });
   });
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/Breeks-App/service-worker.js')
+      .then(r => console.log('SW registered:', r.scope))
+      .catch(e => console.warn('SW registration failed:', e));
+  });
+}
 </script>
 </body>
 </html>

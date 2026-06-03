@@ -269,17 +269,13 @@ function printPo(po){
 </script>
 <script type="text/jsx-source" id="jsx-source">
 const { useState, useEffect, useCallback, useRef } = React;
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx2_JIgJr7AaoWZ1ZVSlOIYixgef2VPQ6TlgU6bUANQ-4sKaDz6u-OUJLGkFSUIgoIk/exec';
 const GAS = {
-  call: (fn, ...args) => new Promise((resolve, reject) => {
-    if (typeof google === 'undefined' || !google.script) {
-      resolve(null);
-      return;
-    }
-    google.script.run
-      .withSuccessHandler(resolve)
-      .withFailureHandler(reject)
-      [fn](...args);
-  })
+  call: (fn, ...args) => fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ fn, args })
+  }).then(r => r.json()).catch(e => { console.warn('GAS call failed:', fn, e); return null; })
 };
 const _writeQueue = {};
 const _writeTimers = {};
@@ -287,12 +283,9 @@ const debouncedSave = (key, value) => {
   _writeQueue[key] = value;
   if (_writeTimers[key]) clearTimeout(_writeTimers[key]);
   _writeTimers[key] = setTimeout(() => {
-    if (isGAS()) {
-      GAS.call('saveKey', key, JSON.stringify(_writeQueue[key]))
-        .catch(e => console.warn('Debounced save error:', key, e));
-    } else {
-      LS.set(key, _writeQueue[key]);
-    }
+    GAS.call('saveKey', key, JSON.stringify(_writeQueue[key]))
+      .catch(e => console.warn('Debounced save error:', key, e));
+    LS.set(key, _writeQueue[key]);
     delete _writeQueue[key];
     delete _writeTimers[key];
   }, 800);
@@ -300,7 +293,7 @@ const debouncedSave = (key, value) => {
 const LS = {
   get: (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } },
   set: (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
-const isGAS = () => typeof google !== 'undefined' && google.script;
+const isGAS = () => true;
 const peso = n => "₱" + Number(n).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = d => new Date(d).toLocaleDateString("en-PH",{day:"2-digit",month:"short",year:"numeric"});
 const CAT_COLORS = { Signage:"#2d2080", Stickers:"#0891b2", Industrial:"#d97706", Apparel:"#9333ea", Services:"#16a34a", "Print Labels":"#e11d48", Print:"#e11d48" };

@@ -432,7 +432,10 @@ function App() {
       const keys = ['pos_products','pos_clients','pos_history','pos_sales_items','pos_payments','pos_inv_counter',
                     'pos_company','pos_cart','pos_sel_client','pos_discount',
                     'pos_notes','pos_vat_override','pos_ewt_pct','pos_current_inv',
-                    'pos_q_counter','pos_q_history'];
+                    'pos_q_counter','pos_q_history',
+                    'pos_dr_counter','pos_dr_history',
+                    'pos_jo_counter','pos_jo_history',
+                    'pos_po_counter','pos_po_history'];
       const data = {};
       keys.forEach(k => { data[k] = LS.get(k, null); });
       setCloudData(data);

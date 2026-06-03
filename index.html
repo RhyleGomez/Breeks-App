@@ -271,11 +271,12 @@ function printPo(po){
 const { useState, useEffect, useCallback, useRef } = React;
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx2_JIgJr7AaoWZ1ZVSlOIYixgef2VPQ6TlgU6bUANQ-4sKaDz6u-OUJLGkFSUIgoIk/exec';
 const GAS = {
-  call: (fn, ...args) => fetch(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ fn, args })
-  }).then(r => r.json()).catch(e => { console.warn('GAS call failed:', fn, e); return null; })
+  call: (fn, ...args) => {
+    const params = new URLSearchParams({ fn, args: JSON.stringify(args) });
+    return fetch(`${GAS_URL}?${params}`, { redirect: 'follow' })
+      .then(r => r.json())
+      .catch(e => { console.warn('GAS call failed:', fn, e); return null; });
+  }
 };
 const _writeQueue = {};
 const _writeTimers = {};

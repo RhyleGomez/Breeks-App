@@ -837,21 +837,13 @@ function App() {
   const signParam = urlParams.get('sign');
   const invParam  = urlParams.get('inv');
   const invDataParam = urlParams.get('d');
-  // Try sessionStorage first (same device), then localStorage, then URL payload
   const decodedInv = React.useMemo(()=>{
     if(!signParam) return null;
-    try {
-      const ss = sessionStorage.getItem('sign_'+signParam);
-      if(ss) return JSON.parse(ss);
-    } catch(e){}
-    try {
-      const ls = localStorage.getItem('sign_'+signParam);
-      if(ls) return JSON.parse(ls);
-    } catch(e){}
-    // Fallback: try URL payload if present
+    // Try localStorage first (same device, has sender sig too)
+    try { const ls=localStorage.getItem('sign_'+signParam); if(ls) return JSON.parse(ls); } catch(e){}
+    // Fall back to URL payload (works on any device, no signatures)
     if(!invDataParam) return null;
-    try { return JSON.parse(decodeURIComponent(escape(atob(invDataParam)))); }
-    catch(e){ return null; }
+    try { return JSON.parse(decodeURIComponent(escape(atob(invDataParam)))); } catch(e){ return null; }
   },[signParam, invDataParam]);
   const [clientSigDone, setClientSigDone] = React.useState(false);
   const [clientHasSig,  setClientHasSig]  = React.useState(false);
@@ -1401,34 +1393,37 @@ function App() {
         </div>
         {showESignModal&&(()=>{
           const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
-          // Store full invoice data in sessionStorage - client on same device gets full data
-          // Client on different device gets basic info from URL params only
-          try {
-            const signData = JSON.stringify({
-              invoiceNo: currentInv?.invoiceNo,
-              date: currentInv?.date,
-              dueDate: currentInv?.dueDate,
-              client: currentInv?.client,
-              cart: currentInv?.cart,
-              subtotal: currentInv?.subtotal,
-              vatTotal: currentInv?.vatTotal,
-              globalDisc: currentInv?.globalDisc,
-              discount: currentInv?.discount,
-              ewtPct: currentInv?.ewtPct,
-              ewtAmt: currentInv?.ewtAmt,
-              otherCharges: currentInv?.otherCharges,
-              total: currentInv?.total,
-              notes: currentInv?.notes,
-              paymentMode: currentInv?.paymentMode,
-              paymentTerms: currentInv?.paymentTerms,
-              companySnap: currentInv?.companySnap||company,
-              eSignSenderSig: senderSigData||currentInv?.eSignSenderSig,
-            });
-            sessionStorage.setItem('sign_'+sigToken, signData);
-            localStorage.setItem('sign_'+sigToken, signData);
-          } catch(e){}
-          // Short URL — only token + invoice number, no data payload
-          const sigLink = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+encodeURIComponent(currentInv?.invoiceNo||'');
+          // Build payload WITHOUT images (keeps URL small ~2KB)
+          const signData = {
+            invoiceNo: currentInv?.invoiceNo,
+            date: currentInv?.date,
+            dueDate: currentInv?.dueDate,
+            client: currentInv?.client,
+            cart: (currentInv?.cart||[]).map(i=>({name:i.name,sku:i.sku,qty:i.qty,unit:i.unit,price:i.price,disc:i.disc||0,vat:i.vat||0,lineNote:i.lineNote||''})),
+            subtotal: currentInv?.subtotal,
+            vatTotal: currentInv?.vatTotal,
+            globalDisc: currentInv?.globalDisc,
+            discount: currentInv?.discount,
+            ewtPct: currentInv?.ewtPct,
+            ewtAmt: currentInv?.ewtAmt,
+            otherCharges: currentInv?.otherCharges||[],
+            total: currentInv?.total,
+            notes: currentInv?.notes||'',
+            paymentMode: currentInv?.paymentMode||'',
+            paymentTerms: currentInv?.paymentTerms||'',
+            companySnap: {
+              name: (currentInv?.companySnap||company).name,
+              address: (currentInv?.companySnap||company).address,
+              phone: (currentInv?.companySnap||company).phone,
+              email: (currentInv?.companySnap||company).email,
+              bank: (currentInv?.companySnap||company).bank,
+            },
+          };
+          // Store sender sig separately in localStorage (too large for URL)
+          try { localStorage.setItem('esig_'+sigToken, senderSigData||currentInv?.eSignSenderSig||''); } catch(e){}
+          // Encode invoice data into URL (no images = small, ~2KB total)
+          const invPayload = btoa(unescape(encodeURIComponent(JSON.stringify(signData))));
+          const sigLink = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+encodeURIComponent(currentInv?.invoiceNo||'')+'&d='+invPayload;
           // Use a stable canvas init — only run once when step is 1
           // by checking if canvas already has _ctx attached
           const initSigCanvas = (canvasId) => {
@@ -1491,7 +1486,6 @@ function App() {
           const sendEmail=()=>{
             if(!eSignEmail.trim()){ alert('Please enter the recipient email.'); return; }
             setESignSending(true);
-            try { localStorage.setItem('esig_'+sigToken, senderSigData||''); } catch(e){}
             const invNo  = currentInv?.invoiceNo||'';
             const client = currentInv?.client?.name||'Client';
             const total  = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});

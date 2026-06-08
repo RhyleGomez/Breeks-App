@@ -1251,22 +1251,22 @@ function App() {
                       setInvRecvSign(sig);
                       setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:sig,emailSent:true}:x));
                       setCurrentInv(c=>({...c,recvSign:sig,emailSent:true}));
-                      // Send invoice email with PDF attachment
+                      // Send invoice email with PDF as base64 download link
                       const clientEmail = currentInv?.client?.email||"";
                       if(clientEmail){
                         setInvEmailSending(true);
                         const invNo = currentInv?.invoiceNo||"";
                         const clientName = currentInv?.client?.name||"Client";
                         const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find your invoice attached to this email.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
                         const filename = invNo + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
                         const el = document.getElementById("receipt-area");
                         const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
-                        window.html2pdf().set(opt).from(el).output("blob").then(blob=>{
-                          const file = new File([blob], filename, {type:"application/pdf"});
-                          const dt = new DataTransfer();
-                          dt.items.add(file);
-                          emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"},{files:dt.files})
+                        window.html2pdf().set(opt).from(el).output("datauristring").then(dataUri=>{
+                          const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:sig,companySnap:currentInv.companySnap};
+                          const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
+                          const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}&d=${encoded}`;
+                          const htmlMsg = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#2d2080;padding:20px 24px;border-radius:8px 8px 0 0"><div style="color:#fff;font-size:22px;font-weight:900;letter-spacing:2px">BREEKS Digital</div><div style="color:#00c4d4;font-size:12px;margin-top:2px">Invoice Notification</div></div><div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none"><p style="font-size:15px;color:#1e293b">Dear <b>${clientName}</b>,</p><p style="color:#475569">Thank you for your business. Please find your invoice details below.</p><div style="background:#f8faff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0"><table style="width:100%;font-size:13px"><tr><td style="color:#64748b;padding:4px 0">Invoice No</td><td style="font-weight:700;color:#2d2080">${invNo}</td></tr><tr><td style="color:#64748b;padding:4px 0">Date</td><td style="font-weight:600">${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}</td></tr><tr><td style="color:#64748b;padding:4px 0">Amount Due</td><td style="font-weight:900;font-size:16px;color:#2d2080">&#8369;${total}</td></tr><tr><td style="color:#64748b;padding:4px 0">Payment Mode</td><td style="font-weight:600">${currentInv?.paymentMode||"Cash"}</td></tr></table></div><div style="text-align:center;margin:20px 0"><a href="${signLink}" style="display:inline-block;background:#2d2080;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">View &amp; Download Invoice PDF</a></div><p style="font-size:12px;color:#94a3b8;text-align:center">Click the button above to view your full invoice and download the PDF.</p><hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0"/><p style="font-size:12px;color:#64748b">For questions, contact us at <a href="mailto:sales@breeksdigital.com" style="color:#2d2080">sales@breeksdigital.com</a></p></div><div style="background:#f1f5f9;padding:12px 24px;border-radius:0 0 8px 8px;text-align:center;font-size:11px;color:#94a3b8">Breeks Digital · This is a computer-generated invoice.</div></div>`;
+                          emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:htmlMsg,reply_to:"sales@breeksdigital.com"})
                             .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
                             .catch(()=>{setInvEmailSending(false);alert("Email send failed. Check client email address.");});
                         }).catch(()=>{setInvEmailSending(false);alert("Failed to generate PDF for email.");});
@@ -1307,19 +1307,14 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const clientName = currentInv?.client?.name||"Client";
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-            const msgBody = `Dear ${clientName},\n\nPlease find your invoice attached to this email.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
-            const filename = invNo + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
-            const el = document.getElementById("receipt-area");
-            const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
+            const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:currentInv.recvSign||null,companySnap:currentInv.companySnap};
+            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
+            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}&d=${encoded}`;
+            const htmlMsg = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto"><div style="background:#2d2080;padding:20px 24px;border-radius:8px 8px 0 0"><div style="color:#fff;font-size:22px;font-weight:900;letter-spacing:2px">BREEKS Digital</div><div style="color:#00c4d4;font-size:12px;margin-top:2px">Invoice Notification</div></div><div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none"><p style="font-size:15px;color:#1e293b">Dear <b>${clientName}</b>,</p><p style="color:#475569">Please find your invoice details below.</p><div style="background:#f8faff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0"><table style="width:100%;font-size:13px"><tr><td style="color:#64748b;padding:4px 0">Invoice No</td><td style="font-weight:700;color:#2d2080">${invNo}</td></tr><tr><td style="color:#64748b;padding:4px 0">Date</td><td style="font-weight:600">${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}</td></tr><tr><td style="color:#64748b;padding:4px 0">Amount Due</td><td style="font-weight:900;font-size:16px;color:#2d2080">₱${total}</td></tr><tr><td style="color:#64748b;padding:4px 0">Payment Mode</td><td style="font-weight:600">${currentInv?.paymentMode||"Cash"}</td></tr></table></div><div style="text-align:center;margin:20px 0"><a href="${signLink}" style="display:inline-block;background:#2d2080;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">📄 View &amp; Download Invoice</a></div><p style="font-size:12px;color:#94a3b8;text-align:center">Click the button above to view your full invoice and download the PDF.</p><hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0"/><p style="font-size:12px;color:#64748b">For questions, contact us at <a href="mailto:sales@breeksdigital.com" style="color:#2d2080">sales@breeksdigital.com</a></p></div><div style="background:#f1f5f9;padding:12px 24px;border-radius:0 0 8px 8px;text-align:center;font-size:11px;color:#94a3b8">Breeks Digital · This is a computer-generated invoice.</div></div>`;
             setInvEmailSending(true);
-            window.html2pdf().set(opt).from(el).output("blob").then(blob=>{
-              const file = new File([blob], filename, {type:"application/pdf"});
-              const dt = new DataTransfer();
-              dt.items.add(file);
-              emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"},{files:dt.files})
-                .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
-                .catch(()=>{setInvEmailSending(false);alert("Email send failed.");});
-            }).catch(()=>{setInvEmailSending(false);alert("Failed to generate PDF.");});
+            emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:htmlMsg,reply_to:"sales@breeksdigital.com"})
+              .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
+              .catch(()=>{setInvEmailSending(false);alert("Email send failed.");});
           }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
             {invEmailSending?"📤 Sending…":invEmailSent?"✅ Resend Email":"📧 Send to Client"}
           </button>

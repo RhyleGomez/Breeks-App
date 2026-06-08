@@ -1514,8 +1514,8 @@ function App() {
               })
               .catch(err=>{ setESignSending(false); alert('Failed to send: '+(err?.text||err?.message||JSON.stringify(err))); });
             };
-            // Shorten via TinyURL, fall back to full link on failure
-            fetch('https://tinyurl.com/api-create.php?url='+encodeURIComponent(sigLink))
+            // Shorten via is.gd (supports CORS), fall back to full link on failure
+            fetch('https://is.gd/create.php?format=simple&url='+encodeURIComponent(sigLink))
               .then(r=>r.text())
               .then(short=>doSend(short&&short.startsWith('https')?short:sigLink))
               .catch(()=>doSend(sigLink));
@@ -1577,7 +1577,7 @@ function App() {
                   </div>
                   <div style={{background:'#1e293b',borderRadius:7,padding:'9px 13px',marginBottom:14,fontSize:11}}>
                     <div style={{fontWeight:700,color:'#94a3b8',marginBottom:4}}>🔗 Signing link — auto-appended to email</div>
-                    <div style={{fontFamily:'monospace',color:'#38bdf8',wordBreak:'break-all',fontSize:10}}>{sigLink}</div>
+                    <div style={{color:'#38bdf8',fontSize:11}}>A short signing link will be generated via <b>is.gd</b> when you hit Send. The full link contains the invoice data encoded for the client.</div>
                   </div>
                   <div style={{display:'flex',gap:8}}>
                     <button onClick={()=>setESignStep(1)} style={{padding:'9px 18px',background:'#1e293b',border:'1px solid #334155',color:'#94a3b8',borderRadius:7,cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>

@@ -223,7 +223,7 @@ const DEFAULT_CLIENTS = [
 <script>
 function printPo(po){
   if(!po) return;
-  const co=po.companySnap||company;
+  const co = {...(po?.companySnap||company), ...company};
   const fmt=d=>new Date(d).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"});
   const scColor={Draft:"#64748b",Sent:"#1d4ed8",Confirmed:"#92400e",Received:"#166534",Cancelled:"#dc2626"};
   const scBg={Draft:"#f1f5f9",Sent:"#dbeafe",Confirmed:"#fef3c7",Received:"#dcfce7",Cancelled:"#fee2e2"};
@@ -452,9 +452,9 @@ function App() {
   const [vatOverride, setVatOverride] = useCloudState("pos_vat_override", null,            appLoaded, cloudData);
   const [ewtPct,      setEwtPct]      = useCloudState("pos_ewt_pct",      0,               appLoaded, cloudData);
   const [company,     setCompany]     = useCloudState("pos_company", {
-    name:"YOUR COMPANY", tagline:"Professional Services & Solutions",
+    name:"BREEKS Digital Marketing Services", tagline:"Digital Marketing Services",
     address:"123 Business Ave, Makati City, Philippines",
-    phone:"+63 2 8888 0000", email:"billing@yourcompany.com",
+    phone:"+63 2 8888 0000", email:"sales@breeksdigital.com",
     bank:"BDO: Your Company  |  Acct No: 1234-5678-90"
   }, appLoaded, cloudData);
   const [currentInv,  setCurrentInv]  = useState(null); // local only — no GAS round-trip
@@ -865,7 +865,7 @@ function App() {
   if(signParam && !clientSigDone) {
     initClientCanvas();
     const matchedInv = history.find(x=>x.invoiceNo===invParam);
-    const co = matchedInv?.companySnap||company;
+    const co = {...(matchedInv?.companySnap||company), ...company};
     return (
       <div style={{minHeight:'100vh',background:'#f0f4f8',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'Roboto',sans-serif"}}>
         <div style={{background:'#fff',borderRadius:14,boxShadow:'0 8px 40px rgba(0,0,0,0.12)',padding:32,width:'100%',maxWidth:560}}>
@@ -918,7 +918,7 @@ function App() {
   }
   if(signParam && clientSigDone) {
     const matchedInv = history.find(x=>x.invoiceNo===invParam);
-    const co = matchedInv?.companySnap||company;
+    const co = {...(matchedInv?.companySnap||company), ...company};
     const senderSig = matchedInv?.eSignSenderSig;
     const signedAt  = new Date().toLocaleString('en-PH');
     const downloadPdf = () => {
@@ -1052,7 +1052,7 @@ function App() {
 
   if(view==="receipt") {
     const inv = currentInv;
-    const co = inv?.companySnap||company;
+    const co = {...(inv?.companySnap||company), ...company};
     const numToWords = n => {
       if(!n||n===0) return "ZERO PESOS";
       const ones=["","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","TEN","ELEVEN","TWELVE","THIRTEEN","FOURTEEN","FIFTEEN","SIXTEEN","SEVENTEEN","EIGHTEEN","NINETEEN"];
@@ -1420,7 +1420,7 @@ function App() {
             const client = currentInv?.client?.name||'Client';
             const total  = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});
             const due    = currentInv?.dueDate ? new Date(currentInv.dueDate).toLocaleDateString('en-PH') : '';
-            const co     = currentInv?.companySnap||company;
+            const co = {...(currentInv?.companySnap||company), ...company};
             const subject = eSignSubject||('Invoice '+invNo+' from '+co.name+' — Action Required');
             const message = eSignBody
               +'\n\n─────────────────────────'
@@ -2194,7 +2194,7 @@ function App() {
   }
   if(view==="quotation" && viewQuote && currentQuote) {
     const q = currentQuote;
-    const co = q.companySnap||company;
+    const co = {...(q?.companySnap||company), ...company};
     const numToWordsQ = n => {
       if(!n||n===0) return "ZERO PESOS";
       const ones=["","ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","TEN","ELEVEN","TWELVE","THIRTEEN","FOURTEEN","FIFTEEN","SIXTEEN","SEVENTEEN","EIGHTEEN","NINETEEN"];
@@ -3618,7 +3618,7 @@ function App() {
   }
   if(view==="delivery_receipt" && viewDr && currentDr) {
     const dr = currentDr;
-    const co = dr.companySnap||company;
+    const co = {...(dr?.companySnap||company), ...company};
     const tStyle={borderCollapse:"collapse",width:"100%",fontSize:11};
     const th={background:"#166534",color:"#fff",padding:"6px 8px",border:"1px solid #166534",fontWeight:700,fontSize:11};
     const td=(extra={})=>({padding:"6px 8px",border:"1px solid #ccc",verticalAlign:"top",...extra});

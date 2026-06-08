@@ -16,6 +16,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+  (function(){ emailjs.init({ publicKey: "qteF9PEfrc2xnOfYa" }); })();
+</script>
 <style>
   :root {
     --brand-purple: #2d2080;
@@ -384,6 +388,104 @@ function TabBar({ openTabs, activeTab, switchTab, closeTab }) {
     </div>
   );
 }
+// ─── Reusable Signature Pad Component ───────────────────────────────────────
+function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disabled }) {
+  const canvasRef = useRef(null);
+  const [drawing, setDrawing] = useState(false);
+  const [hasMark, setHasMark] = useState(false);
+  const [mode, setMode] = useState(savedSig ? "view" : "draw"); // "draw" | "view"
+  const lastPos = useRef(null);
+
+  useEffect(() => {
+    if (savedSig) setMode("view");
+  }, [savedSig]);
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if (e.touches) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+
+  const startDraw = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    setDrawing(true);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    lastPos.current = pos;
+  };
+
+  const draw = (e) => {
+    if (!drawing || disabled) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const pos = getPos(e, canvas);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    lastPos.current = pos;
+    setHasMark(true);
+  };
+
+  const endDraw = (e) => {
+    if (!drawing) return;
+    setDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    setHasMark(false);
+    if (onClear) onClear();
+    setMode("draw");
+  };
+
+  const saveSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasMark) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    if (onSave) onSave(dataUrl);
+    setMode("view");
+  };
+
+  if (mode === "view" && savedSig) {
+    return (
+      <div style={{textAlign:"center"}}>
+        <img src={savedSig} alt="signature" style={{maxHeight:60,maxWidth:200,display:"block",margin:"0 auto",objectFit:"contain"}}/>
+        {!disabled && (
+          <button onClick={clearCanvas} style={{marginTop:4,fontSize:10,padding:"2px 10px",background:"#fee2e2",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:4,cursor:"pointer",fontWeight:700}}>✕ Clear</button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{textAlign:"center"}}>
+      <canvas ref={canvasRef} width={280} height={70}
+        style={{border:`1.5px solid ${color}`,borderRadius:6,background:"#fff",cursor:"crosshair",touchAction:"none",width:"100%",maxWidth:280,display:"block",margin:"0 auto"}}
+        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+      />
+      <div style={{display:"flex",gap:6,justifyContent:"center",marginTop:5}}>
+        <button onClick={clearCanvas} style={{fontSize:10,padding:"2px 10px",background:"#f1f5f9",color:"#64748b",border:"1px solid #cbd5e1",borderRadius:4,cursor:"pointer"}}>Clear</button>
+        <button onClick={saveSignature} disabled={!hasMark} style={{fontSize:10,padding:"2px 10px",background:hasMark?color:"#e2e8f0",color:hasMark?"#fff":"#94a3b8",border:"none",borderRadius:4,cursor:hasMark?"pointer":"default",fontWeight:700}}>✓ Apply</button>
+      </div>
+      <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>Draw your signature above</div>
+    </div>
+  );
+}
+
 function App() {
   const [appLoaded, setAppLoaded] = useState(true);
   const [cloudData,  setCloudData]  = useState({});
@@ -522,6 +624,10 @@ function App() {
   const [pickerOpen,   setPickerOpen]   = useState(null);  // lineId with open autocomplete
   const [pickerSearch, setPickerSearch] = useState("");     // live text in the autocomplete input
   const [signatories, setSignatories] = useState({preparedBy:"", checkedBy:"", receivedBy:""});
+  const [invPrepSign, setInvPrepSign] = useState(null); // base64 dataURL
+  const [invRecvSign, setInvRecvSign] = useState(null); // base64 dataURL
+  const [invEmailSent, setInvEmailSent] = useState(false);
+  const [invEmailSending, setInvEmailSending] = useState(false);
   const [exportMsg,   setExportMsg]   = useState('');
   const [prodCatFilter, setProdCatFilter] = useState("All");
   const [rTab,           setRTab]           = useState("overview");
@@ -718,7 +824,7 @@ function App() {
     const tendered = parseFloat(amountTendered)||0;
     const isCreditMode = paymentMode==="COD" || paymentMode==="Terms";
     const invStatus = (!isCreditMode && tendered >= total && tendered > 0) ? "Paid" : "Unpaid";
-    const inv = { invoiceNo:no, date:new Date().toISOString(), dueDate:resolvedDue, client:effectiveClient, cart:[...cart], discount, vatOverride, ewtPct, ewtAmt, subtotal, vatTotal, globalDisc, otherCharges:[...otherCharges], otherTotal, total, notes, noteImages:[...invNoteImages], status:invStatus, paymentMode, paymentTerms, companySnap:{...company}, signatories:{...signatories} };
+    const inv = { invoiceNo:no, date:new Date().toISOString(), dueDate:resolvedDue, client:effectiveClient, cart:[...cart], discount, vatOverride, ewtPct, ewtAmt, subtotal, vatTotal, globalDisc, otherCharges:[...otherCharges], otherTotal, total, notes, noteImages:[...invNoteImages], status:invStatus, paymentMode, paymentTerms, companySnap:{...company}, signatories:{...signatories}, prepSign:null, recvSign:null, emailSent:false };
     const itemRows = cart.map((item,idx) => ({ invoiceNo:no, lineNo:idx+1, sku:item.sku||"", name:item.customName||item.name, qty:item.qty, unit:item.unit||"", price:item.price, disc:item.disc||0, subtotal: parseFloat((item.price*item.qty*(1-(item.disc||0)/100)).toFixed(4)) }));
     setSalesItems(prev => [...itemRows, ...prev]);
     setHistory(h=>[inv,...h]);
@@ -729,7 +835,7 @@ function App() {
     }
     setLastInvToast({ invoiceNo: no, client: effectiveClient.name, total, inv, paid: invStatus==="Paid" });
     setTimeout(()=>setLastInvToast(null), 6000);
-    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",checkedBy:"",receivedBy:""});
+    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",checkedBy:"",receivedBy:""}); setInvPrepSign(null); setInvRecvSign(null); setInvEmailSent(false);
   };
   const saveProd = () => {
     if(!pForm.sku||!pForm.name||!pForm.price){ alert("SKU, Name and Price are required."); return; }
@@ -819,6 +925,9 @@ function App() {
   useEffect(() => {
     if(view==="receipt" && currentInv?.signatories) {
       setSignatories(currentInv.signatories);
+      setInvPrepSign(currentInv.prepSign||null);
+      setInvRecvSign(currentInv.recvSign||null);
+      setInvEmailSent(!!currentInv.emailSent);
     }
   }, [view, currentInv?.invoiceNo]);
   if(view==="receipt") {
@@ -1039,48 +1148,125 @@ function App() {
             </div>}
           </div>
           <div style={{marginTop:16,borderTop:"1px solid #ccc",paddingTop:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:14}}>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <input type="checkbox" id="recv-chk" style={{width:13,height:13,accentColor:"#2d2080"}}/>
-                  <label htmlFor="recv-chk" style={{fontSize:11,color:"#333",fontWeight:600}}>Received the amount of</label>
-                </div>
-                <div style={{borderBottom:"1px solid #555",width:200,minHeight:18,marginLeft:4}}></div>
-              </div>
-              <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:4}}>
-                <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-                  <div style={{fontSize:9,color:"#555",fontWeight:600,minWidth:90,textAlign:"right",lineHeight:1.4}}>SC/PWD/NAAC/MOV:<br/>Solo Parent ID No.:</div>
-                  <div style={{border:"1px solid #999",borderRadius:2,width:130,height:32}}></div>
-                </div>
-                <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-                  <div style={{fontSize:9,color:"#555",fontWeight:600,minWidth:90,textAlign:"right",lineHeight:1.4}}>SC/PWD/NAAC/MOV:<br/>Signature:</div>
-                  <div style={{border:"1px solid #999",borderRadius:2,width:130,height:32}}></div>
-                </div>
-              </div>
-            </div>
+            {/* ── E-Signature Row (print version: show images if signed) ── */}
             <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",gap:16}}>
-              {[["preparedBy","Prepared by"],["checkedBy","Checked by"],["receivedBy","Received by"]].map(([key,label])=>(
-                <div key={key} style={{flex:1,textAlign:"center"}}>
-                  <div style={{marginBottom:6,minHeight:32,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-                    <span style={{fontWeight:700,fontSize:12,color:"#2d2080",borderBottom:"1px solid #2d2080",minWidth:140,display:"inline-block",textAlign:"center",paddingBottom:2}}>{signatories[key]||" "}</span>
-                  </div>
-                  <div style={{fontSize:10,color:"#555",fontWeight:600}}>{label}</div>
-                  <input className="no-print" type="text" value={signatories[key]} onChange={e=>setSignatories(s=>({...s,[key]:e.target.value}))}
-                    placeholder={"Enter name"}
-                    style={{marginTop:6,width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center"}}/>
+              {/* Prepared By */}
+              <div style={{flex:1,textAlign:"center"}}>
+                <div style={{marginBottom:4,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",border:"1px dashed #c0cfe8",borderRadius:6,background:"#f8f9ff",position:"relative"}}>
+                  {invPrepSign
+                    ? <img src={invPrepSign} alt="prep-sig" style={{maxHeight:64,maxWidth:"100%",objectFit:"contain"}}/>
+                    : <span style={{fontSize:10,color:"#bbb"}}>No signature yet</span>
+                  }
                 </div>
-              ))}
+                <div style={{height:1,background:"#2d2080",margin:"4px 0"}}></div>
+                <div style={{fontSize:10,color:"#555",fontWeight:700}}>Prepared by</div>
+                <div style={{fontSize:10,color:"#2d2080",fontWeight:700,marginTop:2}}>{signatories.preparedBy||co.name||"Breeks Digital"}</div>
+                <div style={{fontSize:9,color:"#888"}}>Signature over printed name</div>
+                {/* no-print controls */}
+                <div className="no-print" style={{marginTop:8}}>
+                  <input type="text" value={signatories.preparedBy} onChange={e=>setSignatories(s=>({...s,preparedBy:e.target.value}))}
+                    placeholder="Prepared by (name)" style={{width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center",marginBottom:6}}/>
+                  <SignaturePad color="#2d2080" savedSig={invPrepSign}
+                    onSave={sig=>{
+                      setInvPrepSign(sig);
+                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,prepSign:sig}:x));
+                      setCurrentInv(c=>({...c,prepSign:sig}));
+                    }}
+                    onClear={()=>{
+                      setInvPrepSign(null);
+                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,prepSign:null}:x));
+                      setCurrentInv(c=>({...c,prepSign:null}));
+                    }}/>
+                </div>
+              </div>
+              {/* Checked By */}
+              <div style={{flex:1,textAlign:"center"}}>
+                <div style={{marginBottom:4,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{fontWeight:700,fontSize:12,color:"#2d2080",borderBottom:"1px solid #2d2080",minWidth:140,display:"inline-block",textAlign:"center",paddingBottom:2}}>{signatories.checkedBy||" "}</span>
+                </div>
+                <div style={{fontSize:10,color:"#555",fontWeight:700}}>Checked by</div>
+                <div style={{fontSize:9,color:"#888"}}>Signature over printed name</div>
+                <div className="no-print" style={{marginTop:8}}>
+                  <input type="text" value={signatories.checkedBy} onChange={e=>setSignatories(s=>({...s,checkedBy:e.target.value}))}
+                    placeholder="Checked by (name)" style={{width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center"}}/>
+                </div>
+              </div>
+              {/* Received By */}
+              <div style={{flex:1,textAlign:"center"}}>
+                <div style={{marginBottom:4,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",border:"1px dashed #c0cfe8",borderRadius:6,background:"#f8f9ff"}}>
+                  {invRecvSign
+                    ? <img src={invRecvSign} alt="recv-sig" style={{maxHeight:64,maxWidth:"100%",objectFit:"contain"}}/>
+                    : <span style={{fontSize:10,color:"#bbb"}}>Awaiting client signature</span>
+                  }
+                </div>
+                <div style={{height:1,background:"#2d2080",margin:"4px 0"}}></div>
+                <div style={{fontSize:10,color:"#555",fontWeight:700}}>Received by</div>
+                <div style={{fontSize:10,color:"#2d2080",fontWeight:700,marginTop:2}}>{signatories.receivedBy||" "}</div>
+                <div style={{fontSize:9,color:"#888"}}>Signature over printed name</div>
+                <div className="no-print" style={{marginTop:8}}>
+                  <input type="text" value={signatories.receivedBy} onChange={e=>setSignatories(s=>({...s,receivedBy:e.target.value}))}
+                    placeholder="Receiver name" style={{width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center",marginBottom:6}}/>
+                  <SignaturePad color="#059669" savedSig={invRecvSign}
+                    onSave={sig=>{
+                      setInvRecvSign(sig);
+                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:sig,emailSent:true}:x));
+                      setCurrentInv(c=>({...c,recvSign:sig,emailSent:true}));
+                      // Send invoice email
+                      const clientEmail = currentInv?.client?.email||"";
+                      if(clientEmail){
+                        setInvEmailSending(true);
+                        const invNo = currentInv?.invoiceNo||"";
+                        const clientName = currentInv?.client?.name||"Client";
+                        const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
+                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find below the details for Invoice ${invNo}.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nThis invoice has been signed and acknowledged by the receiver.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+                        emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
+                          .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
+                          .catch(()=>{setInvEmailSending(false);alert("Email send failed. Check client email address.");});
+                      } else {
+                        setInvEmailSent(true);
+                      }
+                    }}
+                    onClear={()=>{
+                      setInvRecvSign(null);
+                      setInvEmailSent(false);
+                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:null,emailSent:false}:x));
+                      setCurrentInv(c=>({...c,recvSign:null,emailSent:false}));
+                    }}/>
+                  {!invRecvSign && (
+                    <div style={{marginTop:6,fontSize:9,color:"#f59e0b",fontWeight:600,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:4,padding:"4px 8px"}}>
+                      ✍️ Client must sign here to unlock PDF download
+                    </div>
+                  )}
+                  {invEmailSending && <div style={{marginTop:4,fontSize:10,color:"#6366f1",fontWeight:700}}>📤 Sending email…</div>}
+                  {invEmailSent && !invEmailSending && <div style={{marginTop:4,fontSize:10,color:"#22c55e",fontWeight:700}}>✅ Invoice emailed to client</div>}
+                </div>
+              </div>
             </div>
           </div>
           <div style={{textAlign:"center",marginTop:14,fontSize:9,color:"#aaa"}}>This is a computer-generated invoice. · {co.name}</div>
         </div>
         <div className="no-print" style={{textAlign:"center",padding:20,background:"#0f172a",display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
           <button onClick={()=>{
+            if(!invRecvSign){alert("PDF download is locked until the client signs the invoice (Received by).");return;}
             const el = document.getElementById("receipt-area");
             const filename = (currentInv?.invoiceNo||"invoice") + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
             const opt = { margin:[5,5,5,5], filename, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["avoid-all","css","legacy"]} };
             window.html2pdf().set(opt).from(el).save();
-          }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>⬇️ Download PDF</button>
+          }} style={{padding:"11px 24px",background:invRecvSign?"linear-gradient(135deg,#7c3aed,#4f46e5)":"#334155",color:invRecvSign?"#fff":"#94a3b8",border:invRecvSign?"none":"1px solid #475569",borderRadius:8,fontWeight:700,cursor:invRecvSign?"pointer":"not-allowed",fontSize:14,opacity:invRecvSign?1:0.6}} title={invRecvSign?"":"Requires client signature"}>⬇️ Download PDF {!invRecvSign&&"🔒"}</button>
+          <button onClick={()=>{
+            const clientEmail = currentInv?.client?.email||prompt("Enter client email address:");
+            if(!clientEmail) return;
+            const invNo = currentInv?.invoiceNo||"";
+            const clientName = currentInv?.client?.name||"Client";
+            const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
+            const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nKindly review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+            setInvEmailSending(true);
+            emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
+              .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
+              .catch(()=>{setInvEmailSending(false);alert("Email send failed.");});
+          }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
+            {invEmailSending?"📤 Sending…":invEmailSent?"✅ Resend Email":"📧 Send to Client"}
+          </button>
           <button onClick={()=>window.print()} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
           <button onClick={()=>{
             const newStatus = currentInv?.status==="Paid"?"Unpaid":"Paid";
@@ -1102,7 +1288,7 @@ function App() {
             setPmForm({amount:bal2>0?bal2.toFixed(2):"",method:"Cash",ref:"",date:new Date().toISOString().slice(0,10)});
             setShowPayModal(currentInv?.invoiceNo);
           }} style={{padding:"11px 24px",background:"rgba(34,197,94,0.15)",border:"1px solid #22c55e",color:"#4ade80",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>💳 Record Payment</button>
-          <button onClick={()=>{setCart([]);setDiscount(0);setSelClient(null);navigateTo("pos");}} style={{padding:"11px 24px",background:"#334155",color:"#f1f5f9",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✚ New Invoice</button>
+          <button onClick={()=>{setCart([]);setDiscount(0);setSelClient(null);setInvPrepSign(null);setInvRecvSign(null);setInvEmailSent(false);navigateTo("pos");}} style={{padding:"11px 24px",background:"#334155",color:"#f1f5f9",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✚ New Invoice</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
         </div>
         {showPayModal&&(()=>{

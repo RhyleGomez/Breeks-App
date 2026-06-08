@@ -831,6 +831,225 @@ function App() {
       setSignatories(currentInv.signatories);
     }
   }, [view, currentInv?.invoiceNo]);
+
+  // ── Client e-sign landing page ──────────────────────────────────────────────
+  const urlParams = new URLSearchParams(window.location.search);
+  const signParam = urlParams.get('sign');
+  const invParam  = urlParams.get('inv');
+  const [clientSigDone, setClientSigDone] = React.useState(false);
+  const [clientHasSig,  setClientHasSig]  = React.useState(false);
+  const [clientSigData, setClientSigData] = React.useState(null);
+  const initClientCanvas = () => {
+    setTimeout(()=>{
+      const c = document.getElementById('client-sig-canvas');
+      if(!c||c._bound) return;
+      c._bound = true;
+      const dpr = window.devicePixelRatio||1;
+      const cssW = c.parentElement ? c.parentElement.clientWidth - 4 : 500;
+      const cssH = 150;
+      c.width  = Math.round(cssW*dpr); c.height = Math.round(cssH*dpr);
+      c.style.width = cssW+'px'; c.style.height = cssH+'px';
+      const ctx = c.getContext('2d');
+      ctx.scale(dpr,dpr);
+      ctx.strokeStyle='#1a1560'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+      c._ctx = ctx;
+      let drawing=false, hasMark=false;
+      const pos=(e)=>{ const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return [s.clientX-r.left,s.clientY-r.top]; };
+      const start=(e)=>{ e.preventDefault(); drawing=true; const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(x,y); };
+      const move=(e)=>{ if(!drawing)return; e.preventDefault(); const [x,y]=pos(e); ctx.lineTo(x,y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x,y); if(!hasMark){hasMark=true;setClientHasSig(true);} };
+      const end=()=>{ drawing=false; ctx.beginPath(); };
+      c.addEventListener('mousedown',start); c.addEventListener('mousemove',move); c.addEventListener('mouseup',end); c.addEventListener('mouseleave',end);
+      c.addEventListener('touchstart',start,{passive:false}); c.addEventListener('touchmove',move,{passive:false}); c.addEventListener('touchend',end);
+    },100);
+  };
+  if(signParam && !clientSigDone) {
+    initClientCanvas();
+    const matchedInv = history.find(x=>x.invoiceNo===invParam);
+    const co = matchedInv?.companySnap||company;
+    return (
+      <div style={{minHeight:'100vh',background:'#f0f4f8',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'Roboto',sans-serif"}}>
+        <div style={{background:'#fff',borderRadius:14,boxShadow:'0 8px 40px rgba(0,0,0,0.12)',padding:32,width:'100%',maxWidth:560}}>
+          <div style={{textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:22,fontWeight:900,color:'#2d2080',letterSpacing:1}}>{co.name||'BREEKS'}</div>
+            <div style={{fontSize:11,color:'#00c4d4',fontWeight:700,letterSpacing:2,textTransform:'uppercase'}}>Digital Marketing Services</div>
+          </div>
+          <div style={{background:'#eef2ff',borderRadius:8,padding:'14px 18px',marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:800,color:'#2d2080',textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Invoice Details</div>
+            {matchedInv ? (<>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:3}}><span style={{color:'#555'}}>Invoice No</span><b style={{color:'#2d2080'}}>{matchedInv.invoiceNo}</b></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:3}}><span style={{color:'#555'}}>Client</span><b>{matchedInv.client?.name}</b></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:3}}><span style={{color:'#555'}}>Amount Due</span><b style={{color:'#2d2080',fontSize:15}}>₱{(matchedInv.total||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</b></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}><span style={{color:'#555'}}>Due Date</span><b>{matchedInv.dueDate?new Date(matchedInv.dueDate).toLocaleDateString('en-PH'):'-'}</b></div>
+            </>) : (
+              <div style={{fontSize:13,color:'#555'}}>Invoice: <b>{invParam}</b><br/><span style={{fontSize:11,color:'#94a3b8'}}>Open this link on the device where the app is running to see full details.</span></div>
+            )}
+          </div>
+          <div style={{fontSize:13,color:'#333',marginBottom:10,fontWeight:600}}>Please draw your signature below to confirm receipt and agreement:</div>
+          <div style={{background:'#f8faff',border:'2px solid #2d2080',borderRadius:8,overflow:'hidden',marginBottom:10,minHeight:154}}>
+            <canvas id="client-sig-canvas" height="150" style={{display:'block',width:'100%',minHeight:150,cursor:'crosshair',touchAction:'none'}}/>
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:16}}>
+            <button onClick={()=>{ const c=document.getElementById('client-sig-canvas'); if(c&&c._ctx){c._ctx.clearRect(0,0,c.width,c.height);c._bound=false;setClientHasSig(false);}}} style={{padding:'8px 16px',background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:600,color:'#555'}}>🗑 Clear</button>
+            <button disabled={!clientHasSig} onClick={()=>{
+              const c=document.getElementById('client-sig-canvas');
+              if(!c) return;
+              const sigData=c.toDataURL();
+              setClientSigData(sigData);
+              if(matchedInv){
+                setHistory(h=>h.map(x=>x.invoiceNo===matchedInv.invoiceNo?{...x,eSignStatus:'completed',clientSig:sigData,clientSignedAt:new Date().toISOString()}:x));
+              }
+              // Send confirmation email via EmailJS
+              window.emailjs&&window.emailjs.send('service_knunqeh','template_ll8llaf',{
+                to_email:'sales@breeksdigital.com',
+                cc_email: matchedInv?.eSignSentTo||'',
+                subject:'✅ Invoice '+(invParam||'')+' has been signed by client',
+                message:'Great news! Your client has signed Invoice '+(invParam||'')+'.\n\nClient: '+(matchedInv?.client?.name||'Unknown')+'\nAmount: ₱'+((matchedInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2}))+'\nSigned at: '+new Date().toLocaleString('en-PH')+'\n\nThe invoice is now fully executed.',
+                from_name:'Breeks POS',
+              });
+              setClientSigDone(true);
+            }} style={{flex:1,padding:'11px 0',background:clientHasSig?'linear-gradient(135deg,#22c55e,#16a34a)':'#e2e8f0',border:'none',borderRadius:7,cursor:clientHasSig?'pointer':'not-allowed',color:clientHasSig?'#fff':'#94a3b8',fontSize:14,fontWeight:800}}>
+              ✅ I agree & sign this invoice
+            </button>
+          </div>
+          <div style={{fontSize:10,color:'#94a3b8',textAlign:'center'}}>By signing, you confirm receipt and agreement to the invoice terms. · {co.name}</div>
+        </div>
+      </div>
+    );
+  }
+  if(signParam && clientSigDone) {
+    const matchedInv = history.find(x=>x.invoiceNo===invParam);
+    const co = matchedInv?.companySnap||company;
+    const senderSig = matchedInv?.eSignSenderSig;
+    const signedAt  = new Date().toLocaleString('en-PH');
+    const downloadPdf = () => {
+      const el = document.getElementById('signed-invoice-pdf');
+      if(!el||!window.html2pdf) return;
+      const filename = (invParam||'invoice')+'_SIGNED.pdf';
+      window.html2pdf().set({
+        margin:[8,8,8,8], filename,
+        image:{type:'jpeg',quality:0.98},
+        html2canvas:{scale:2,useCORS:true,scrollY:0},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+      }).from(el).save();
+    };
+    return (
+      <div style={{minHeight:'100vh',background:'#f0f4f8',fontFamily:"'Roboto',sans-serif",padding:20}}>
+        {/* Confirmation card */}
+        <div style={{maxWidth:520,margin:'0 auto 24px',background:'#fff',borderRadius:14,boxShadow:'0 8px 40px rgba(0,0,0,0.12)',padding:36,textAlign:'center'}}>
+          <div style={{fontSize:52,marginBottom:12}}>✅</div>
+          <div style={{fontSize:22,fontWeight:900,color:'#16a34a',marginBottom:8}}>Invoice Signed!</div>
+          <div style={{fontSize:14,color:'#555',lineHeight:1.8,marginBottom:20}}>
+            Thank you! Your signature has been recorded for Invoice <b style={{color:'#2d2080'}}>{invParam}</b>.<br/>
+            A confirmation has been sent to both parties.
+          </div>
+          <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:'12px 18px',fontSize:13,color:'#15803d',fontWeight:600,marginBottom:20}}>
+            🎉 Both parties have been notified. This invoice is now fully executed.
+          </div>
+          <button onClick={downloadPdf} style={{width:'100%',padding:'13px 0',background:'linear-gradient(135deg,#2d2080,#3a2db5)',border:'none',borderRadius:8,color:'#fff',fontWeight:800,fontSize:15,cursor:'pointer'}}>
+            ⬇️ Download Signed Invoice PDF
+          </button>
+        </div>
+
+        {/* Hidden signed invoice for PDF generation */}
+        <div id="signed-invoice-pdf" style={{maxWidth:750,margin:'0 auto',background:'#fff',padding:'28px 32px',fontFamily:"'Roboto','Arial',sans-serif",fontSize:12,color:'#111'}}>
+          {/* Header */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18,paddingBottom:12,borderBottom:'3px solid #2d2080'}}>
+            <div>
+              <div style={{fontSize:20,fontWeight:900,color:'#2d2080',letterSpacing:2}}>{co.name||'BREEKS'}</div>
+              <div style={{fontSize:10,fontWeight:700,color:'#00c4d4',letterSpacing:2,textTransform:'uppercase'}}>DIGITAL MARKETING SERVICES</div>
+              <div style={{fontSize:10,color:'#555',marginTop:3}}>{co.address}</div>
+              <div style={{fontSize:10,color:'#555'}}>{co.phone}{co.email&&' · '+co.email}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontSize:24,fontWeight:900,color:'#2d2080',letterSpacing:3}}>INVOICE</div>
+              <div style={{fontSize:11,color:'#555',marginTop:4,lineHeight:2}}>
+                <div>No: <b style={{color:'#2d2080'}}>{matchedInv?.invoiceNo||invParam}</b></div>
+                <div>Date: <b>{matchedInv?.date?new Date(matchedInv.date).toLocaleDateString('en-PH'):'-'}</b></div>
+                <div>Due: <b>{matchedInv?.dueDate?new Date(matchedInv.dueDate).toLocaleDateString('en-PH'):'-'}</b></div>
+                <div>Status: <b style={{color:'#16a34a'}}>SIGNED ✅</b></div>
+              </div>
+            </div>
+          </div>
+          {/* Bill To */}
+          {matchedInv?.client&&(
+            <div style={{background:'#eef2ff',borderRadius:6,padding:'10px 14px',marginBottom:14,display:'inline-block',minWidth:260}}>
+              <div style={{fontSize:9,fontWeight:800,color:'#2d2080',textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>Bill To</div>
+              <div style={{fontWeight:700,fontSize:14}}>{matchedInv.client.name}</div>
+              {matchedInv.client.contact&&<div style={{fontSize:11,color:'#333'}}>{matchedInv.client.contact}</div>}
+              {matchedInv.client.phone&&<div style={{fontSize:11,color:'#555'}}>{matchedInv.client.phone}</div>}
+              {matchedInv.client.address&&<div style={{fontSize:11,color:'#555'}}>{matchedInv.client.address}</div>}
+            </div>
+          )}
+          {/* Items table */}
+          {matchedInv?.cart&&(
+            <table style={{borderCollapse:'collapse',width:'100%',fontSize:11,marginBottom:14}}>
+              <thead>
+                <tr>{['#','Description','Qty','Unit','Unit Price','Amount (₱)'].map((h,i)=>(
+                  <th key={i} style={{background:'#2d2080',color:'#fff',padding:'7px 8px',border:'1px solid #2d2080',textAlign:i<=1?'left':'center'}}>{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {matchedInv.cart.map((item,idx)=>{
+                  const amt=item.price*item.qty*(1-(item.disc||0)/100);
+                  const bg=idx%2===0?'#fff':'#eef2ff';
+                  return(<tr key={idx}>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,textAlign:'center',color:'#888'}}>{idx+1}</td>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,fontWeight:600}}>{item.name}</td>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,textAlign:'center'}}>{item.qty}</td>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,textAlign:'center',color:'#555'}}>{item.unit}</td>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,textAlign:'right'}}>{Number(item.price).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td style={{padding:'6px 8px',border:'1px solid #ddd',background:bg,textAlign:'right',fontWeight:700}}>{Number(amt).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          )}
+          {/* Total */}
+          {matchedInv&&(
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+              <table style={{borderCollapse:'collapse',fontSize:12,minWidth:260}}>
+                <tbody>
+                  <tr><td style={{padding:'5px 10px',border:'1px solid #ddd'}}>Subtotal</td><td style={{padding:'5px 10px',border:'1px solid #ddd',textAlign:'right'}}>{Number(matchedInv.subtotal||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>
+                  <tr><td style={{padding:'5px 10px',border:'1px solid #ddd'}}>VAT</td><td style={{padding:'5px 10px',border:'1px solid #ddd',textAlign:'right'}}>{Number(matchedInv.vatTotal||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>
+                  <tr><td style={{padding:'8px 10px',border:'1px solid #2d2080',background:'#2d2080',color:'#fff',fontWeight:900}}>TOTAL AMOUNT</td><td style={{padding:'8px 10px',border:'1px solid #2d2080',background:'#2d2080',color:'#fff',fontWeight:900,textAlign:'right'}}>₱{Number(matchedInv.total||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* Signatures */}
+          <div style={{borderTop:'1px solid #ccc',paddingTop:14,marginTop:8}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:20}}>
+              <div style={{flex:1,textAlign:'center'}}>
+                <div style={{minHeight:60,display:'flex',alignItems:'flex-end',justifyContent:'center',marginBottom:4}}>
+                  {senderSig
+                    ? <img src={senderSig} alt="Sender signature" style={{maxHeight:52,maxWidth:180,objectFit:'contain',borderBottom:'1px solid #2d2080'}}/>
+                    : <div style={{borderBottom:'1px solid #2d2080',minWidth:160,height:1}}/>
+                  }
+                </div>
+                <div style={{fontSize:10,color:'#555',fontWeight:700}}>Prepared by</div>
+                <div style={{fontSize:10,color:'#2d2080',fontWeight:600}}>{co.name}</div>
+              </div>
+              <div style={{flex:1,textAlign:'center'}}>
+                <div style={{minHeight:60,display:'flex',alignItems:'flex-end',justifyContent:'center',marginBottom:4}}>
+                  {clientSigData
+                    ? <img src={clientSigData} alt="Client signature" style={{maxHeight:52,maxWidth:180,objectFit:'contain',borderBottom:'1px solid #2d2080'}}/>
+                    : <div style={{borderBottom:'1px solid #2d2080',minWidth:160,height:1}}/>
+                  }
+                </div>
+                <div style={{fontSize:10,color:'#555',fontWeight:700}}>Received by</div>
+                <div style={{fontSize:10,color:'#2d2080',fontWeight:600}}>{matchedInv?.client?.name||''}</div>
+              </div>
+            </div>
+          </div>
+          {/* Footer */}
+          <div style={{textAlign:'center',marginTop:16,fontSize:9,color:'#aaa',borderTop:'1px solid #eee',paddingTop:8}}>
+            Digitally signed on {signedAt} · Both parties have agreed to the terms of this invoice · {co.name}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if(view==="receipt") {
     const inv = currentInv;
     const co = inv?.companySnap||company;
@@ -1134,7 +1353,7 @@ function App() {
         </div>
         {showESignModal&&(()=>{
           const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
-          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/sign/'+sigToken;
+          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo;
           // Use a stable canvas init — only run once when step is 1
           // by checking if canvas already has _ctx attached
           const initSigCanvas = (canvasId) => {

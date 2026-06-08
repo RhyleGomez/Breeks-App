@@ -16,6 +16,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>emailjs.init('qteF9PEfrc2xnOfYa');</script>
 <style>
   :root {
     --brand-purple: #2d2080;
@@ -1195,34 +1197,38 @@ function App() {
           const sendEmail=()=>{
             if(!eSignEmail.trim()){ alert('Please enter the recipient email.'); return; }
             setESignSending(true);
-            // Build a clean invoice summary for the email body
-            const invNo   = currentInv?.invoiceNo||'';
-            const client  = currentInv?.client?.name||'Client';
-            const total   = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});
-            const due     = currentInv?.dueDate ? new Date(currentInv.dueDate).toLocaleDateString('en-PH') : '';
-            const co      = currentInv?.companySnap||company;
+            const invNo  = currentInv?.invoiceNo||'';
+            const client = currentInv?.client?.name||'Client';
+            const total  = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+            const due    = currentInv?.dueDate ? new Date(currentInv.dueDate).toLocaleDateString('en-PH') : '';
+            const co     = currentInv?.companySnap||company;
             const subject = eSignSubject||('Invoice '+invNo+' from '+co.name+' — Action Required');
-            const body    = eSignBody+'\n\n---\nInvoice No: '+invNo+'\nAmount Due: ₱'+total+(due?'\nDue Date: '+due:'')+'\n\n🔗 Sign here: '+sigLink+'\n\n'+co.name+' · '+co.email+' · '+co.phone;
-            // Try Gmail MCP via fetch; fall back gracefully
-            fetch('https://gmailmcp.googleapis.com/mcp/v1', {
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body: JSON.stringify({
-                method:'tools/call',
-                params:{
-                  name:'send_email',
-                  arguments:{to:eSignEmail, subject, body, mimeType:'text/plain'}
-                }
-              })
+            const message = eSignBody
+              +'\n\n─────────────────────────'
+              +'\nInvoice No : '+invNo
+              +'\nClient     : '+client
+              +'\nAmount Due : ₱'+total
+              +(due?'\nDue Date   : '+due:'')
+              +'\n─────────────────────────'
+              +'\n\n🔏 Sign here:\n'+sigLink
+              +'\n\nThis invoice was sent from '+co.name+' · '+co.email;
+            window.emailjs.send('service_knunqeh','template_ll8llaf',{
+              to_email: eSignEmail,
+              cc_email: 'sales@breeksdigital.com',
+              subject,
+              message,
+              from_name: co.name||'Breeks Digital',
             })
-            .then(r=>r.json())
-            .catch(()=>null)
-            .finally(()=>{
+            .then(()=>{
               setESignSending(false);
               setESignStep(3);
               setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:x));
               setCurrentInv(c=>c?{...c,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:c);
               showBadge();
+            })
+            .catch(err=>{
+              setESignSending(false);
+              alert('Failed to send email: '+(err?.text||err?.message||JSON.stringify(err)));
             });
           };
           return (

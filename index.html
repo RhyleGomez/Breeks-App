@@ -568,6 +568,13 @@ function App() {
   const [signInvData, setSignInvData] = useState(() => {
     try {
       const p = new URLSearchParams(window.location.search);
+      const sign = p.get("sign");
+      // First try localStorage snap saved when email was sent
+      if (sign) {
+        const raw = localStorage.getItem(`pos_inv_snap_${sign}`);
+        if (raw) return JSON.parse(raw);
+      }
+      // Fallback: URL-encoded data param
       const d = p.get("d");
       if (d) return JSON.parse(atob(d));
     } catch(e) {}
@@ -1259,8 +1266,8 @@ function App() {
                         const clientName = currentInv?.client?.name||"Client";
                         const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
                         const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:sig,companySnap:currentInv.companySnap};
-                        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
-                        const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}&d=${encoded}`;
+                        try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
+                        const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
                         const msgBody = `Dear ${clientName},\n\nThank you for your business.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
                         emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
                           .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
@@ -1303,8 +1310,8 @@ function App() {
             const clientName = currentInv?.client?.name||"Client";
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:currentInv.recvSign||null,companySnap:currentInv.companySnap};
-            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(snap))));
-            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}&d=${encoded}`;
+            try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
+            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
             const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
             setInvEmailSending(true);
             emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})

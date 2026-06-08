@@ -560,10 +560,18 @@ function App() {
   const [currentInv,  setCurrentInv]  = useState(null); // local only — no GAS round-trip
   const [editInv,     setEditInv]     = useState(null); // local only — no GAS round-trip
   const [view,        setView]        = useState("pos"); // local only — no GAS round-trip on navigation
-  // ── Client signing mode (?sign=INV-XXXX) ──────────────────────────────────
+  // ── Client signing mode (?sign=INV-XXXX&d=base64data) ────────────────────
   const [signMode,    setSignMode]    = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get("sign") || null;
+  });
+  const [signInvData, setSignInvData] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const d = p.get("d");
+      if (d) return JSON.parse(atob(d));
+    } catch(e) {}
+    return null;
   });
   const TAB_LABELS = {
     pos:"🧾 POS", receipt:"🧾 Receipt", history:"📋 Invoice History",
@@ -909,6 +917,33 @@ function App() {
       }
     }
   };
+  // Poll for client signatures saved by the signing page
+  useEffect(() => {
+    const interval = setInterval(() => {
+      history.forEach(inv => {
+        if (inv.recvSign) return; // already signed
+        try {
+          const raw = localStorage.getItem(`pos_client_sig_${inv.invoiceNo}`);
+          if (raw) {
+            const {recvSign, receivedBy} = JSON.parse(raw);
+            if (recvSign) {
+              setHistory(h => h.map(x => x.invoiceNo === inv.invoiceNo
+                ? {...x, recvSign, emailSent:true, signatories:{...x.signatories, receivedBy}}
+                : x));
+              if (currentInv?.invoiceNo === inv.invoiceNo) {
+                setCurrentInv(c => ({...c, recvSign, signatories:{...c.signatories, receivedBy}}));
+                setInvRecvSign(recvSign);
+                setInvEmailSent(true);
+              }
+              localStorage.removeItem(`pos_client_sig_${inv.invoiceNo}`);
+            }
+          }
+        } catch(e) {}
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [history, currentInv?.invoiceNo]);
+
   useEffect(() => {
     if(view==="receipt" && currentInv && shouldAutoPdf) {
       setShouldAutoPdf(false);
@@ -1216,18 +1251,25 @@ function App() {
                       setInvRecvSign(sig);
                       setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:sig,emailSent:true}:x));
                       setCurrentInv(c=>({...c,recvSign:sig,emailSent:true}));
-                      // Send invoice email
+                      // Send invoice email with PDF attachment
                       const clientEmail = currentInv?.client?.email||"";
                       if(clientEmail){
                         setInvEmailSending(true);
                         const invNo = currentInv?.invoiceNo||"";
                         const clientName = currentInv?.client?.name||"Client";
                         const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-                        const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
-                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\n──────────────────────────────\n📄 VIEW & SIGN YOUR INVOICE:\n${signLink}\n──────────────────────────────\n\nPlease open the link above to review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
-                        emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
-                          .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
-                          .catch(()=>{setInvEmailSending(false);alert("Email send failed. Check client email address.");});
+                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find your invoice attached to this email.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+                        const filename = invNo + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
+                        const el = document.getElementById("receipt-area");
+                        const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
+                        window.html2pdf().set(opt).from(el).output("blob").then(blob=>{
+                          const file = new File([blob], filename, {type:"application/pdf"});
+                          const dt = new DataTransfer();
+                          dt.items.add(file);
+                          emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"},{files:dt.files})
+                            .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
+                            .catch(()=>{setInvEmailSending(false);alert("Email send failed. Check client email address.");});
+                        }).catch(()=>{setInvEmailSending(false);alert("Failed to generate PDF for email.");});
                       } else {
                         setInvEmailSent(true);
                       }
@@ -1265,12 +1307,19 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const clientName = currentInv?.client?.name||"Client";
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
-            const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\n──────────────────────────────\n📄 VIEW & SIGN YOUR INVOICE:\n${signLink}\n──────────────────────────────\n\nPlease open the link above to review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+            const msgBody = `Dear ${clientName},\n\nPlease find your invoice attached to this email.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+            const filename = invNo + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
+            const el = document.getElementById("receipt-area");
+            const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
             setInvEmailSending(true);
-            emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
-              .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
-              .catch(()=>{setInvEmailSending(false);alert("Email send failed.");});
+            window.html2pdf().set(opt).from(el).output("blob").then(blob=>{
+              const file = new File([blob], filename, {type:"application/pdf"});
+              const dt = new DataTransfer();
+              dt.items.add(file);
+              emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"},{files:dt.files})
+                .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
+                .catch(()=>{setInvEmailSending(false);alert("Email send failed.");});
+            }).catch(()=>{setInvEmailSending(false);alert("Failed to generate PDF.");});
           }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
             {invEmailSending?"📤 Sending…":invEmailSent?"✅ Resend Email":"📧 Send to Client"}
           </button>
@@ -4883,7 +4932,7 @@ function App() {
   }
   // ── Client Signing View ────────────────────────────────────────────────────
   if (signMode) {
-    const signInv = history.find(x => x.invoiceNo === signMode);
+    const signInv = signInvData || history.find(x => x.invoiceNo === signMode);
     const co = signInv?.companySnap || company;
     const fmt = d => new Date(d).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"});
     const [clientSigned, setClientSigned] = useState(!!signInv?.recvSign);
@@ -4988,11 +5037,20 @@ function App() {
                     if (!clientName.trim()) { alert("Please enter your name before signing."); return; }
                     setClientSig(sig);
                     setClientSigned(true);
-                    const updated = history.map(x => x.invoiceNo === signMode
-                      ? {...x, recvSign:sig, emailSent:true, signatories:{...x.signatories, receivedBy:clientName}}
-                      : x);
-                    setHistory(updated);
-                    try { localStorage.setItem("pos_history", JSON.stringify(updated)); } catch(e){}
+                    // Save signature back to localStorage so POS picks it up
+                    try {
+                      const sigKey = `pos_client_sig_${signMode}`;
+                      localStorage.setItem(sigKey, JSON.stringify({recvSign:sig, receivedBy:clientName, signedAt:new Date().toISOString()}));
+                      // Also patch pos_history if it exists in this browser
+                      const raw = localStorage.getItem("pos_history");
+                      if (raw) {
+                        const hist = JSON.parse(raw);
+                        const updated = hist.map(x => x.invoiceNo === signMode
+                          ? {...x, recvSign:sig, emailSent:true, signatories:{...x.signatories, receivedBy:clientName}}
+                          : x);
+                        localStorage.setItem("pos_history", JSON.stringify(updated));
+                      }
+                    } catch(e) {}
                   }}
                   onClear={()=>setClientSig(null)}/>
                 <div style={{marginTop:10,fontSize:11,color:"#94a3b8",textAlign:"center"}}>🔒 Your signature is securely linked to this invoice only.</div>

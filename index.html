@@ -1491,32 +1491,24 @@ function App() {
             const co = {...(currentInv?.companySnap||company), ...company};
             const subject = eSignSubject||('Invoice '+invNo+' from '+co.name+' — Action Required');
             const doSend = (finalLink) => {
-              const htmlMessage = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-  <div style="background:#2d2080;padding:20px 24px;border-radius:8px 8px 0 0;">
-    <div style="color:#fff;font-size:20px;font-weight:900;letter-spacing:1px;">${co.name||'BREEKS'}</div>
-    <div style="color:#00c4d4;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">DIGITAL MARKETING SERVICES</div>
-  </div>
-  <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
-    <p style="font-size:15px;color:#111;margin:0 0 16px;">${eSignBody.replace(/\n/g,'<br/>')}</p>
-    <div style="background:#f8faff;border:1px solid #c0cfe8;border-radius:8px;padding:16px 20px;margin:20px 0;">
-      <div style="font-size:12px;color:#555;margin-bottom:4px;">Invoice No</div>
-      <div style="font-size:18px;font-weight:900;color:#2d2080;">${invNo}</div>
-      <div style="font-size:14px;color:#333;margin-top:8px;">Amount Due: <b>₱${total}</b></div>
-      ${due?`<div style="font-size:13px;color:#555;">Due Date: ${due}</div>`:''}
-    </div>
-    <div style="text-align:center;margin:24px 0;">
-      <a href="${finalLink}" style="display:inline-block;background:linear-gradient(135deg,#2d2080,#3a2db5);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:800;letter-spacing:0.5px;">🔏 Click Here to Sign Invoice</a>
-    </div>
-    <p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">If the button doesn't work, copy this link:<br/><span style="color:#2d2080;word-break:break-all;">${finalLink}</span></p>
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;"/>
-    <p style="font-size:11px;color:#94a3b8;margin:0;">This invoice was sent from ${co.name} · <a href="mailto:${co.email||'sales@breeksdigital.com'}" style="color:#2d2080;">${co.email||'sales@breeksdigital.com'}</a></p>
-  </div>
-</div>`;
+              const plainMessage = eSignBody
+                +'\n\n'
+                +'Invoice No  : '+invNo+'\n'
+                +'Client      : '+client+'\n'
+                +'Amount Due  : ₱'+total+'\n'
+                +(due?'Due Date    : '+due+'\n':'')
+                +'\n'
+                +'🔏 Sign here:\n'
+                +finalLink
+                +'\n\n'
+                +'──────────────────────────\n'
+                +co.name+'\n'
+                +(co.email||'sales@breeksdigital.com')+' · '+(co.phone||'');
               window.emailjs.send('service_knunqeh','template_ll8llaf',{
                 to_email: eSignEmail,
                 cc_email: 'sales@breeksdigital.com',
                 subject,
-                message: htmlMessage,
+                message: plainMessage,
                 from_name: co.name||'Breeks Digital',
               })
               .then(()=>{

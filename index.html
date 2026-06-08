@@ -391,23 +391,20 @@ function TabBar({ openTabs, activeTab, switchTab, closeTab }) {
 // ─── Reusable Signature Pad Component ───────────────────────────────────────
 function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disabled }) {
   const canvasRef = useRef(null);
+  const fileRef   = useRef(null);
   const [drawing, setDrawing] = useState(false);
   const [hasMark, setHasMark] = useState(false);
-  const [mode, setMode] = useState(savedSig ? "view" : "draw"); // "draw" | "view"
+  const [mode, setMode]       = useState(savedSig ? "view" : "draw"); // "draw" | "upload" | "view"
   const lastPos = useRef(null);
 
-  useEffect(() => {
-    if (savedSig) setMode("view");
-  }, [savedSig]);
+  useEffect(() => { if (savedSig) setMode("view"); }, [savedSig]);
 
   const getPos = (e, canvas) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    if (e.touches) {
-      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
-    }
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    if (e.touches) return { x:(e.touches[0].clientX-rect.left)*scaleX, y:(e.touches[0].clientY-rect.top)*scaleY };
+    return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
   };
 
   const startDraw = (e) => {
@@ -417,8 +414,7 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     const pos = getPos(e, canvas);
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
+    ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
     lastPos.current = pos;
   };
 
@@ -427,21 +423,13 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
     e.preventDefault();
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
     const pos = getPos(e, canvas);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    lastPos.current = pos;
-    setHasMark(true);
+    ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    lastPos.current = pos; setHasMark(true);
   };
 
-  const endDraw = (e) => {
-    if (!drawing) return;
-    setDrawing(false);
-  };
+  const endDraw = () => { setDrawing(false); };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -454,9 +442,33 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
   const saveSignature = () => {
     const canvas = canvasRef.current;
     if (!canvas || !hasMark) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    if (onSave) onSave(dataUrl);
+    if (onSave) onSave(canvas.toDataURL("image/png"));
     setMode("view");
+  };
+
+  const handleUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) { if(onSave) onSave(ev.target.result); setMode("view"); return; }
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const scale = Math.min(canvas.width/img.width, canvas.height/img.height);
+        const w = img.width*scale, h = img.height*scale;
+        ctx.drawImage(img, (canvas.width-w)/2, (canvas.height-h)/2, w, h);
+        const dataUrl = canvas.toDataURL("image/png");
+        setHasMark(true);
+        if (onSave) onSave(dataUrl);
+        setMode("view");
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   if (mode === "view" && savedSig) {
@@ -472,6 +484,14 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
 
   return (
     <div style={{textAlign:"center"}}>
+      {/* Tab selector */}
+      {!disabled && (
+        <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:6}}>
+          <button onClick={()=>setMode("draw")} style={{fontSize:9,padding:"2px 10px",borderRadius:4,border:`1px solid ${mode==="draw"?color:"#cbd5e1"}`,background:mode==="draw"?color:"#f1f5f9",color:mode==="draw"?"#fff":"#64748b",cursor:"pointer",fontWeight:700}}>✏️ Draw</button>
+          <button onClick={()=>{ setMode("upload"); setTimeout(()=>fileRef.current&&fileRef.current.click(),50); }} style={{fontSize:9,padding:"2px 10px",borderRadius:4,border:`1px solid ${mode==="upload"?"#059669":"#cbd5e1"}`,background:mode==="upload"?"#059669":"#f1f5f9",color:mode==="upload"?"#fff":"#64748b",cursor:"pointer",fontWeight:700}}>📁 Upload</button>
+          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleUpload}/>
+        </div>
+      )}
       <canvas ref={canvasRef} width={280} height={70}
         style={{border:`1.5px solid ${color}`,borderRadius:6,background:"#fff",cursor:"crosshair",touchAction:"none",width:"100%",maxWidth:280,display:"block",margin:"0 auto"}}
         onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
@@ -481,7 +501,7 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
         <button onClick={clearCanvas} style={{fontSize:10,padding:"2px 10px",background:"#f1f5f9",color:"#64748b",border:"1px solid #cbd5e1",borderRadius:4,cursor:"pointer"}}>Clear</button>
         <button onClick={saveSignature} disabled={!hasMark} style={{fontSize:10,padding:"2px 10px",background:hasMark?color:"#e2e8f0",color:hasMark?"#fff":"#94a3b8",border:"none",borderRadius:4,cursor:hasMark?"pointer":"default",fontWeight:700}}>✓ Apply</button>
       </div>
-      <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>Draw your signature above</div>
+      <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>Draw your signature or upload an image</div>
     </div>
   );
 }
@@ -1265,7 +1285,7 @@ function App() {
                         const invNo = currentInv?.invoiceNo||"";
                         const clientName = currentInv?.client?.name||"Client";
                         const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-                        const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:sig,companySnap:currentInv.companySnap};
+                        const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:sig,status:currentInv.status,companySnap:currentInv.companySnap};
                         try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
                         const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
                         const msgBody = `Dear ${clientName},\n\nThank you for your business.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
@@ -1309,7 +1329,7 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const clientName = currentInv?.client?.name||"Client";
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-            const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,signatories:{...currentInv.signatories},prepSign:currentInv.prepSign||null,recvSign:currentInv.recvSign||null,companySnap:currentInv.companySnap};
+            const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
             const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
             const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
@@ -1342,6 +1362,13 @@ function App() {
             setShowPayModal(currentInv?.invoiceNo);
           }} style={{padding:"11px 24px",background:"rgba(34,197,94,0.15)",border:"1px solid #22c55e",color:"#4ade80",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>💳 Record Payment</button>
           <button onClick={()=>{setCart([]);setDiscount(0);setSelClient(null);setInvPrepSign(null);setInvRecvSign(null);setInvEmailSent(false);navigateTo("pos");}} style={{padding:"11px 24px",background:"#334155",color:"#f1f5f9",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✚ New Invoice</button>
+          <button onClick={()=>{
+            const invNo = currentInv?.invoiceNo||"";
+            const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
+            try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
+            const link = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
+            navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link)).catch(()=>{prompt("Copy this link to share with client:",link);});
+          }} style={{padding:"11px 24px",background:"rgba(0,196,212,0.12)",border:"1px solid var(--brand-cyan)",color:"#00c4d4",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🔗 Copy Share Link</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
         </div>
         {showPayModal&&(()=>{
@@ -5098,7 +5125,7 @@ function App() {
               <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)}
                 placeholder="Your full name (required)"
                 style={{width:"100%",padding:"9px 12px",border:"1.5px solid #c0cfe8",borderRadius:8,fontSize:13,color:"#1e293b",marginBottom:10,boxSizing:"border-box"}}/>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature:</div>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature or upload an image:</div>
               <SignaturePad color="#059669" savedSig={clientSig}
                 onSave={sig=>{
                   if(!clientName.trim()){alert("Please enter your name before signing.");return;}
@@ -5108,6 +5135,11 @@ function App() {
                     localStorage.setItem(`pos_client_sig_${signMode}`,JSON.stringify({recvSign:sig,receivedBy:clientName,signedAt:new Date().toISOString()}));
                     const raw=localStorage.getItem("pos_history");
                     if(raw){const hist=JSON.parse(raw);localStorage.setItem("pos_history",JSON.stringify(hist.map(x=>x.invoiceNo===signMode?{...x,recvSign:sig,emailSent:true,signatories:{...x.signatories,receivedBy:clientName}}:x)));}
+                    // Send confirmation email back to sender
+                    const senderEmail = co.email || "sales@breeksdigital.com";
+                    const invDate = signInv.date ? new Date(signInv.date).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"}) : "";
+                    const confirmMsg = `Hi,\n\nYour invoice ${signMode} has been acknowledged and signed by the client.\n\nClient: ${clientName}\nInvoice No: ${signMode}\nDate: ${invDate}\nAmount: PHP ${Number(signInv.total||0).toLocaleString("en-PH",{minimumFractionDigits:2})}\nSigned at: ${new Date().toLocaleString("en-PH")}\n\nBest regards,\nBreeks Digital Invoice System`;
+                    emailjs.send("service_knunqeh","template_ll8llaf",{to_email:senderEmail,subject:`✅ Invoice ${signMode} Signed by ${clientName}`,message:confirmMsg,reply_to:senderEmail}).catch(()=>{});
                   }catch(e){}
                 }}
                 onClear={()=>setClientSig(null)}/>

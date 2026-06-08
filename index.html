@@ -4943,8 +4943,9 @@ function App() {
       </div>
     );
     return (
-      <div style={{minHeight:"100vh",background:"#f0f4ff",fontFamily:"'Segoe UI',system-ui,sans-serif",padding:"24px 16px"}}>
-        <div style={{maxWidth:620,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{minHeight:"100vh",background:"#f0f4ff",fontFamily:"'Segoe UI',system-ui,sans-serif",padding:"24px 16px 40px"}}>
+        {/* Header */}
+        <div style={{maxWidth:720,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{background:"#2d2080",color:"#fff",fontWeight:900,fontSize:18,padding:"6px 14px",borderRadius:8,letterSpacing:2}}>BREEKS</div>
             <div>
@@ -4957,105 +4958,180 @@ function App() {
             <div style={{fontSize:18,fontWeight:900,color:"#2d2080"}}>{signInv.invoiceNo}</div>
           </div>
         </div>
-        <div style={{maxWidth:620,margin:"0 auto",background:"#fff",borderRadius:14,boxShadow:"0 4px 24px rgba(45,32,128,0.10)",overflow:"hidden"}}>
-          <div style={{background:clientSigned?"#16a34a":"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
-            {clientSigned ? "✅ Invoice Acknowledged & Signed" : "✍️ Your Signature is Required"}
+
+        {/* Status bar */}
+        <div style={{maxWidth:720,margin:"0 auto 12px",background:clientSigned?"#16a34a":"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+          {clientSigned ? "✅ Invoice Acknowledged & Signed — You may now download your PDF" : "✍️ Please review the invoice below, then sign at the bottom"}
+        </div>
+
+        {/* Download button (shown after signing) */}
+        {clientSigned && (
+          <div style={{maxWidth:720,margin:"0 auto 16px",display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>{
+              const el = document.getElementById("sign-receipt-area");
+              if(!el||!window.html2pdf) return;
+              const filename = signInv.invoiceNo + "_" + (signInv.client?.name||"").replace(/\s+/g,"_") + ".pdf";
+              const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
+              window.html2pdf().set(opt).from(el).save();
+            }} style={{padding:"12px 28px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:"0 4px 16px rgba(124,58,237,0.4)"}}>
+              ⬇️ Download Invoice PDF
+            </button>
           </div>
-          <div style={{padding:"18px 20px 12px",borderBottom:"1px solid #e2e8f0"}}>
-            <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:4}}>BILLED TO</div>
-            <div style={{fontSize:16,fontWeight:800,color:"#1e293b"}}>{signInv.client?.name||"Client"}</div>
-            {signInv.client?.address&&<div style={{fontSize:12,color:"#64748b",marginTop:2}}>{signInv.client.address}</div>}
+        )}
+
+        {/* Printable invoice area */}
+        <div id="sign-receipt-area" style={{maxWidth:720,margin:"0 auto",background:"#fff",borderRadius:14,boxShadow:"0 4px 24px rgba(45,32,128,0.10)",overflow:"hidden",fontFamily:"Arial,sans-serif"}}>
+          {/* Invoice header */}
+          <div style={{padding:"20px 24px",borderBottom:"2px solid #2d2080",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+            <div>
+              <div style={{fontWeight:900,fontSize:22,color:"#2d2080"}}>{co.name||"Breeks Digital"}</div>
+              {co.tagline&&<div style={{fontSize:11,color:"#64748b"}}>{co.tagline}</div>}
+              {co.address&&<div style={{fontSize:11,color:"#64748b"}}>{co.address}</div>}
+              {co.phone&&<div style={{fontSize:11,color:"#64748b"}}>{co.phone}</div>}
+              {co.tin&&<div style={{fontSize:11,color:"#64748b"}}>TIN: {co.tin}</div>}
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontWeight:900,fontSize:26,color:"#2d2080"}}>INVOICE</div>
+              <div style={{fontWeight:700,fontSize:14}}>#{signInv.invoiceNo}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>Date: {fmt(signInv.date)}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>Due: {fmt(signInv.dueDate)}</div>
+              <div style={{marginTop:6,display:"inline-block",padding:"3px 12px",borderRadius:12,fontWeight:700,fontSize:11,background:signInv.status==="Paid"?"#dcfce7":"#fef3c7",color:signInv.status==="Paid"?"#166534":"#92400e"}}>{signInv.status||"Unpaid"}</div>
+            </div>
           </div>
-          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0",display:"flex",gap:24,flexWrap:"wrap"}}>
-            {[["Invoice No",signInv.invoiceNo],["Date",fmt(signInv.date)],["Due Date",fmt(signInv.dueDate)],["Payment Mode",signInv.paymentMode||"Cash"]].map(([k,v])=>(
-              <div key={k}>
-                <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,textTransform:"uppercase"}}>{k}</div>
-                <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{v}</div>
-              </div>
-            ))}
+          {/* Bill to */}
+          <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0",background:"#f8faff"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#2d2080",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Billed To</div>
+            <div style={{fontWeight:800,fontSize:15,color:"#1e293b"}}>{signInv.client?.name||"Client"}</div>
+            {signInv.client?.address&&<div style={{fontSize:12,color:"#64748b"}}>{signInv.client.address}</div>}
+            {signInv.client?.phone&&<div style={{fontSize:12,color:"#64748b"}}>{signInv.client.phone}</div>}
+            {signInv.client?.tin&&<div style={{fontSize:12,color:"#64748b"}}>TIN: {signInv.client.tin}</div>}
           </div>
-          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0"}}>
-            <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:8}}>ITEMS</div>
+          {/* Items table */}
+          <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-              <thead><tr style={{background:"#f1f5f9"}}>
-                {["Description","Qty","Unit Price","Amount"].map((h,i)=><th key={h} style={{padding:"6px 8px",textAlign:i>0?"right":"left",fontWeight:700,color:"#475569",fontSize:11}}>{h}</th>)}
-              </tr></thead>
+              <thead>
+                <tr style={{background:"#2d2080",color:"#fff"}}>
+                  {["#","Description","Qty","Unit","Unit Price","Amount"].map((h,i)=>(
+                    <th key={h} style={{padding:"8px 10px",textAlign:i===0||i===2||i===3?"center":i>=4?"right":"left",fontSize:11,fontWeight:700}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
                 {(signInv.cart||[]).map((item,i)=>(
-                  <tr key={i} style={{borderBottom:"1px solid #f1f5f9"}}>
-                    <td style={{padding:"6px 8px",color:"#1e293b",fontWeight:600}}>{item.customName||item.name}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#64748b"}}>{item.qty}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#64748b"}}>₱{Number(item.price||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#2d2080"}}>₱{Number((item.qty||0)*(item.price||0)).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
+                  <tr key={i} style={{background:i%2===0?"#fff":"#f8faff",borderBottom:"1px solid #e2e8f0"}}>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"#94a3b8"}}>{i+1}</td>
+                    <td style={{padding:"8px 10px",fontWeight:600,color:"#1e293b"}}>{item.customName||item.name}{item.note&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:400}}>{item.note}</div>}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center"}}>{item.qty}</td>
+                    <td style={{padding:"8px 10px",textAlign:"center",color:"#64748b"}}>{item.unit||""}</td>
+                    <td style={{padding:"8px 10px",textAlign:"right"}}>₱{Number(item.price||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
+                    <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"#2d2080"}}>₱{Number((item.qty||0)*(item.price||0)).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"flex-end"}}>
-            <div style={{background:"#2d2080",color:"#fff",borderRadius:8,padding:"10px 20px",minWidth:220}}>
-              <div style={{display:"flex",justifyContent:"space-between",gap:32,fontSize:15,fontWeight:900}}>
+          {/* Totals */}
+          <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"flex-end"}}>
+            <div style={{minWidth:260}}>
+              {signInv.vatTotal>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>VAT</span><span>₱{Number(signInv.vatTotal||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
+              {(signInv.ewtPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>EWT ({signInv.ewtPct}%)</span><span>-₱{Number(signInv.ewtAmt||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
+              <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#2d2080",borderRadius:8,color:"#fff",fontWeight:900,fontSize:15,marginTop:6}}>
                 <span>TOTAL AMOUNT</span>
                 <span>₱{Number(signInv.total||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span>
               </div>
+              {signInv.paymentMode&&<div style={{display:"flex",gap:8,marginTop:8,fontSize:11,color:"#64748b"}}><span style={{fontWeight:700}}>Payment Mode:</span><span>{signInv.paymentMode}{signInv.paymentTerms?" · "+signInv.paymentTerms:""}</span></div>}
             </div>
           </div>
-          {signInv.prepSign && (
-            <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0"}}>
-              <div style={{textAlign:"center"}}>
-                <img src={signInv.prepSign} alt="prep-sig" style={{maxHeight:56,maxWidth:160,objectFit:"contain",display:"block",margin:"0 auto"}}/>
-                <div style={{height:1,background:"#2d2080",margin:"4px auto",width:160}}></div>
+          {/* Notes */}
+          {signInv.notes&&<div style={{padding:"12px 24px",borderBottom:"1px solid #e2e8f0",background:"#fffbeb"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#92400e",textTransform:"uppercase",marginBottom:4}}>Notes</div>
+            <div style={{fontSize:12,color:"#374151",whiteSpace:"pre-wrap"}}>{signInv.notes}</div>
+          </div>}
+          {/* Signatures */}
+          <div style={{padding:"20px 24px",borderBottom:"1px solid #e2e8f0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+              {/* Prepared by */}
+              <div style={{flex:1,textAlign:"center",minWidth:140}}>
+                <div style={{minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:4}}>
+                  {signInv.prepSign
+                    ? <img src={signInv.prepSign} alt="prep-sig" style={{maxHeight:64,maxWidth:180,objectFit:"contain"}}/>
+                    : <div style={{height:1,background:"#2d2080",width:"80%"}}></div>
+                  }
+                </div>
+                <div style={{height:1,background:"#2d2080",margin:"4px 0"}}></div>
                 <div style={{fontSize:10,fontWeight:700,color:"#2d2080"}}>Prepared by</div>
-                <div style={{fontSize:11,color:"#475569"}}>{signInv.signatories?.preparedBy||co.name||"Breeks Digital"}</div>
+                <div style={{fontSize:11,color:"#475569",marginTop:2}}>{signInv.signatories?.preparedBy||co.name||"Breeks Digital"}</div>
+                <div style={{fontSize:9,color:"#94a3b8"}}>Signature over printed name</div>
               </div>
+              {/* Checked by */}
+              <div style={{flex:1,textAlign:"center",minWidth:140}}>
+                <div style={{minHeight:70,display:"flex",alignItems:"flex-end",justifyContent:"center",marginBottom:4}}>
+                  <div style={{height:1,background:"#aaa",width:"80%"}}></div>
+                </div>
+                <div style={{height:1,background:"#aaa",margin:"4px 0"}}></div>
+                <div style={{fontSize:10,fontWeight:700,color:"#555"}}>Checked by</div>
+                <div style={{fontSize:11,color:"#475569",marginTop:2}}>{signInv.signatories?.checkedBy||" "}</div>
+                <div style={{fontSize:9,color:"#94a3b8"}}>Signature over printed name</div>
+              </div>
+              {/* Received by */}
+              <div style={{flex:1,textAlign:"center",minWidth:140}}>
+                <div style={{minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:4}}>
+                  {clientSig
+                    ? <img src={clientSig} alt="recv-sig" style={{maxHeight:64,maxWidth:180,objectFit:"contain"}}/>
+                    : <div style={{height:1,background:"#059669",width:"80%"}}></div>
+                  }
+                </div>
+                <div style={{height:1,background:"#059669",margin:"4px 0"}}></div>
+                <div style={{fontSize:10,fontWeight:700,color:"#059669"}}>Received by</div>
+                <div style={{fontSize:11,color:"#475569",marginTop:2}}>{clientName||" "}</div>
+                <div style={{fontSize:9,color:"#94a3b8"}}>Signature over printed name</div>
+              </div>
+            </div>
+          </div>
+          {/* Sign section (hidden after signing) */}
+          {!clientSigned && (
+            <div style={{padding:"20px 24px",background:"#f0f4ff",borderTop:"2px solid #2d2080"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#1e293b",marginBottom:4}}>✍️ Sign to Acknowledge Receipt</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>By signing below, you confirm receipt of the goods/services listed in this invoice.</div>
+              <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)}
+                placeholder="Your full name (required)"
+                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #c0cfe8",borderRadius:8,fontSize:13,color:"#1e293b",marginBottom:10,boxSizing:"border-box"}}/>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature:</div>
+              <SignaturePad color="#059669" savedSig={clientSig}
+                onSave={sig=>{
+                  if(!clientName.trim()){alert("Please enter your name before signing.");return;}
+                  setClientSig(sig);
+                  setClientSigned(true);
+                  try {
+                    localStorage.setItem(`pos_client_sig_${signMode}`,JSON.stringify({recvSign:sig,receivedBy:clientName,signedAt:new Date().toISOString()}));
+                    const raw=localStorage.getItem("pos_history");
+                    if(raw){const hist=JSON.parse(raw);localStorage.setItem("pos_history",JSON.stringify(hist.map(x=>x.invoiceNo===signMode?{...x,recvSign:sig,emailSent:true,signatories:{...x.signatories,receivedBy:clientName}}:x)));}
+                  }catch(e){}
+                }}
+                onClear={()=>setClientSig(null)}/>
+              <div style={{marginTop:10,fontSize:11,color:"#94a3b8",textAlign:"center"}}>🔒 Your signature is securely linked to this invoice only.</div>
             </div>
           )}
-          <div style={{padding:"20px"}}>
-            {clientSigned ? (
-              <div style={{textAlign:"center",padding:20}}>
-                <div style={{fontSize:36,marginBottom:8}}>✅</div>
-                <div style={{fontSize:16,fontWeight:800,color:"#16a34a",marginBottom:4}}>Invoice Acknowledged</div>
-                <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Signed by <b>{clientName}</b></div>
-                <img src={clientSig} alt="client-sig" style={{maxHeight:70,maxWidth:220,objectFit:"contain",border:"1px solid #e2e8f0",borderRadius:8,display:"block",margin:"0 auto 8px"}}/>
-                <div style={{fontSize:11,color:"#94a3b8"}}>You may close this window.</div>
-              </div>
-            ) : (
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:4}}>Sign to Acknowledge Receipt</div>
-                <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>By signing below, you confirm receipt of the goods/services listed in this invoice.</div>
-                <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)}
-                  placeholder="Your full name (required)"
-                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #c0cfe8",borderRadius:8,fontSize:13,color:"#1e293b",marginBottom:10,boxSizing:"border-box"}}/>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature:</div>
-                <SignaturePad color="#2d2080" savedSig={clientSig}
-                  onSave={sig => {
-                    if (!clientName.trim()) { alert("Please enter your name before signing."); return; }
-                    setClientSig(sig);
-                    setClientSigned(true);
-                    // Save signature back to localStorage so POS picks it up
-                    try {
-                      const sigKey = `pos_client_sig_${signMode}`;
-                      localStorage.setItem(sigKey, JSON.stringify({recvSign:sig, receivedBy:clientName, signedAt:new Date().toISOString()}));
-                      // Also patch pos_history if it exists in this browser
-                      const raw = localStorage.getItem("pos_history");
-                      if (raw) {
-                        const hist = JSON.parse(raw);
-                        const updated = hist.map(x => x.invoiceNo === signMode
-                          ? {...x, recvSign:sig, emailSent:true, signatories:{...x.signatories, receivedBy:clientName}}
-                          : x);
-                        localStorage.setItem("pos_history", JSON.stringify(updated));
-                      }
-                    } catch(e) {}
-                  }}
-                  onClear={()=>setClientSig(null)}/>
-                <div style={{marginTop:10,fontSize:11,color:"#94a3b8",textAlign:"center"}}>🔒 Your signature is securely linked to this invoice only.</div>
-              </div>
-            )}
-          </div>
-          <div style={{padding:"10px 20px",background:"#f8fafc",textAlign:"center",fontSize:10,color:"#94a3b8"}}>
-            {co.name||"Breeks Digital"} · {co.address||""} · {co.phone||""} · This is a computer-generated invoice.
+          {/* Footer */}
+          <div style={{padding:"10px 24px",background:"#f8fafc",textAlign:"center",fontSize:10,color:"#94a3b8"}}>
+            {co.name||"Breeks Digital"}{co.address?" · "+co.address:""}{co.phone?" · "+co.phone:""} · This is a computer-generated invoice.
           </div>
         </div>
+
+        {/* Bottom download button */}
+        {clientSigned && (
+          <div style={{maxWidth:720,margin:"16px auto 0",display:"flex",gap:10,justifyContent:"center"}}>
+            <button onClick={()=>{
+              const el=document.getElementById("sign-receipt-area");
+              if(!el||!window.html2pdf)return;
+              const filename=signInv.invoiceNo+"_"+(signInv.client?.name||"").replace(/\s+/g,"_")+".pdf";
+              const opt={margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
+              window.html2pdf().set(opt).from(el).save();
+            }} style={{padding:"12px 32px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:"0 4px 16px rgba(124,58,237,0.4)"}}>
+              ⬇️ Download Invoice PDF
+            </button>
+          </div>
+        )}
       </div>
     );
   }

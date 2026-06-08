@@ -926,7 +926,7 @@ function App() {
   if(signParam && clientSigDone) {
     const matchedInv = history.find(x=>x.invoiceNo===invParam) || decodedInv;
     const co = {...(matchedInv?.companySnap||company), ...(matchedInv?.companySnap||company)};
-    const senderSig = matchedInv?.eSignSenderSig || decodedInv?.eSignSenderSig;
+    const senderSig = matchedInv?.eSignSenderSig || decodedInv?.eSignSenderSig || (()=>{ try{ return localStorage.getItem('esig_'+signParam)||''; }catch(e){return '';} })();
     const signedAt  = new Date().toLocaleString('en-PH');
 
     const downloadSignedPdf = () => {
@@ -1391,13 +1391,13 @@ function App() {
         </div>
         {showESignModal&&(()=>{
           const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
-          // Encode essential invoice data into URL so client can reconstruct on any device
+          // Encode only essential invoice data — exclude signature images and note images to keep URL short
           const invPayload = btoa(unescape(encodeURIComponent(JSON.stringify({
             invoiceNo: currentInv?.invoiceNo,
             date: currentInv?.date,
             dueDate: currentInv?.dueDate,
             client: currentInv?.client,
-            cart: currentInv?.cart,
+            cart: (currentInv?.cart||[]).map(i=>({name:i.name,sku:i.sku,qty:i.qty,unit:i.unit,price:i.price,disc:i.disc,vat:i.vat,lineNote:i.lineNote})),
             subtotal: currentInv?.subtotal,
             vatTotal: currentInv?.vatTotal,
             globalDisc: currentInv?.globalDisc,
@@ -1409,8 +1409,13 @@ function App() {
             notes: currentInv?.notes,
             paymentMode: currentInv?.paymentMode,
             paymentTerms: currentInv?.paymentTerms,
-            companySnap: currentInv?.companySnap||company,
-            eSignSenderSig: currentInv?.eSignSenderSig||senderSigData,
+            companySnap: {
+              name: (currentInv?.companySnap||company).name,
+              address: (currentInv?.companySnap||company).address,
+              phone: (currentInv?.companySnap||company).phone,
+              email: (currentInv?.companySnap||company).email,
+              bank: (currentInv?.companySnap||company).bank,
+            },
           }))));
           const sigLink  = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo+'&d='+invPayload;
           // Use a stable canvas init — only run once when step is 1
@@ -1475,6 +1480,8 @@ function App() {
           const sendEmail=()=>{
             if(!eSignEmail.trim()){ alert('Please enter the recipient email.'); return; }
             setESignSending(true);
+            // Store sender sig in localStorage keyed by token so client PDF can include it
+            try { localStorage.setItem('esig_'+sigToken, senderSigData||''); } catch(e){}
             const invNo  = currentInv?.invoiceNo||'';
             const client = currentInv?.client?.name||'Client';
             const total  = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});

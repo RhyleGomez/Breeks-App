@@ -1391,7 +1391,8 @@ function App() {
         </div>
         {showESignModal&&(()=>{
           const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
-          // Encode only essential invoice data — exclude signature images and note images to keep URL short
+          // Encode essential invoice data — sender sig included but note images excluded
+          const sigDataShort = senderSigData ? senderSigData.substring(0,8000) : '';
           const invPayload = btoa(unescape(encodeURIComponent(JSON.stringify({
             invoiceNo: currentInv?.invoiceNo,
             date: currentInv?.date,
@@ -1417,7 +1418,7 @@ function App() {
               bank: (currentInv?.companySnap||company).bank,
             },
           }))));
-          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo+'&d='+invPayload;
+          const sigLink = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo+'&d='+invPayload;
           // Use a stable canvas init — only run once when step is 1
           // by checking if canvas already has _ctx attached
           const initSigCanvas = (canvasId) => {
@@ -1480,7 +1481,6 @@ function App() {
           const sendEmail=()=>{
             if(!eSignEmail.trim()){ alert('Please enter the recipient email.'); return; }
             setESignSending(true);
-            // Store sender sig in localStorage keyed by token so client PDF can include it
             try { localStorage.setItem('esig_'+sigToken, senderSigData||''); } catch(e){}
             const invNo  = currentInv?.invoiceNo||'';
             const client = currentInv?.client?.name||'Client';
@@ -1488,33 +1488,37 @@ function App() {
             const due    = currentInv?.dueDate ? new Date(currentInv.dueDate).toLocaleDateString('en-PH') : '';
             const co = {...(currentInv?.companySnap||company), ...company};
             const subject = eSignSubject||('Invoice '+invNo+' from '+co.name+' — Action Required');
-            const message = eSignBody
-              +'\n\n─────────────────────────'
-              +'\nInvoice No : '+invNo
-              +'\nClient     : '+client
-              +'\nAmount Due : ₱'+total
-              +(due?'\nDue Date   : '+due:'')
-              +'\n─────────────────────────'
-              +'\n\n🔏 Sign here:\n'+sigLink
-              +'\n\nThis invoice was sent from '+co.name+' · '+co.email;
-            window.emailjs.send('service_knunqeh','template_ll8llaf',{
-              to_email: eSignEmail,
-              cc_email: 'sales@breeksdigital.com',
-              subject,
-              message,
-              from_name: co.name||'Breeks Digital',
-            })
-            .then(()=>{
-              setESignSending(false);
-              setESignStep(3);
-              setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:x));
-              setCurrentInv(c=>c?{...c,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:c);
-              showBadge();
-            })
-            .catch(err=>{
-              setESignSending(false);
-              alert('Failed to send email: '+(err?.text||err?.message||JSON.stringify(err)));
-            });
+            const doSend = (finalLink) => {
+              const message = eSignBody
+                +'\n\n─────────────────────────'
+                +'\nInvoice No : '+invNo
+                +'\nClient     : '+client
+                +'\nAmount Due : ₱'+total
+                +(due?'\nDue Date   : '+due:'')
+                +'\n─────────────────────────'
+                +'\n\n🔏 Click here to sign:\n'+finalLink
+                +'\n\nThis invoice was sent from '+co.name+' · '+co.email;
+              window.emailjs.send('service_knunqeh','template_ll8llaf',{
+                to_email: eSignEmail,
+                cc_email: 'sales@breeksdigital.com',
+                subject,
+                message,
+                from_name: co.name||'Breeks Digital',
+              })
+              .then(()=>{
+                setESignSending(false);
+                setESignStep(3);
+                setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:x));
+                setCurrentInv(c=>c?{...c,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:c);
+                showBadge();
+              })
+              .catch(err=>{ setESignSending(false); alert('Failed to send: '+(err?.text||err?.message||JSON.stringify(err))); });
+            };
+            // Shorten via TinyURL, fall back to full link on failure
+            fetch('https://tinyurl.com/api-create.php?url='+encodeURIComponent(sigLink))
+              .then(r=>r.text())
+              .then(short=>doSend(short&&short.startsWith('https')?short:sigLink))
+              .catch(()=>doSend(sigLink));
           };
           return (
             <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowESignModal(false)}>

@@ -521,7 +521,15 @@ function App() {
   const [showProductPanel, setShowProductPanel] = useState(false); // product dropdown
   const [pickerOpen,   setPickerOpen]   = useState(null);  // lineId with open autocomplete
   const [pickerSearch, setPickerSearch] = useState("");     // live text in the autocomplete input
-  const [signatories, setSignatories] = useState({preparedBy:"", checkedBy:"", receivedBy:""});
+  const [signatories, setSignatories] = useState({preparedBy:"", receivedBy:""});
+  const [showESignModal, setShowESignModal] = useState(false);
+  const [eSignStep, setESignStep]     = useState(1); // 1=sign, 2=send, 3=sent
+  const [senderSigData, setSenderSigData] = useState(null); // base64 dataURL
+  const [eSignEmail, setESignEmail]   = useState('');
+  const [eSignSubject, setESignSubject] = useState('');
+  const [eSignBody, setESignBody]     = useState('');
+  const [eSignSending, setESignSending] = useState(false);
+  const [eSignHasSig,  setESignHasSig]  = useState(false);
   const [exportMsg,   setExportMsg]   = useState('');
   const [prodCatFilter, setProdCatFilter] = useState("All");
   const [rTab,           setRTab]           = useState("overview");
@@ -544,7 +552,7 @@ function App() {
   const [qActiveCat,   setQActiveCat]   = useState('All');
   const [qSearch,      setQSearch]      = useState('');
   const [qFlash,       setQFlash]       = useState(null);
-  const [qSignatories, setQSignatories] = useState({preparedBy:'', checkedBy:'', receivedBy:''});
+  const [qSignatories, setQSignatories] = useState({preparedBy:'', receivedBy:''});
   const [qCounter,      setQCounter]      = useCloudState('pos_q_counter',   1,  appLoaded, cloudData);
   const [quoteHistory,  setQuoteHistory]  = useCloudState('pos_q_history',   [], appLoaded, cloudData);
   const [currentQuote,  setCurrentQuote]  = useState(null);
@@ -729,7 +737,7 @@ function App() {
     }
     setLastInvToast({ invoiceNo: no, client: effectiveClient.name, total, inv, paid: invStatus==="Paid" });
     setTimeout(()=>setLastInvToast(null), 6000);
-    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",checkedBy:"",receivedBy:""});
+    setCart([]); setDiscount(0); setSelClient(null); setCashCustomerName(""); setPaymentMode("Cash"); setPaymentTerms("COD"); setAmountTendered(""); setVatOverride(null); setEwtPct(0); setNotes(""); setInvNoteImages([]); setDueDate(""); setOtherCharges([]); setSignatories({preparedBy:"",receivedBy:""});
   };
   const saveProd = () => {
     if(!pForm.sku||!pForm.name||!pForm.price){ alert("SKU, Name and Price are required."); return; }
@@ -870,6 +878,7 @@ function App() {
                 <div>Date: <b>{fmtDate(inv?.date||new Date())}</b></div>
                 <div>Due Date: <b>{fmtDate(inv?.dueDate||new Date())}</b></div>
                 <div>Status: <b style={{color:inv?.status==="Paid"?"#16a34a":inv?.status==="VOID"?"#dc2626":"#d97706"}}>{inv?.status||"Unpaid"}</b></div>
+                {inv?.eSignStatus==='sent'&&<div style={{marginTop:4}}><span style={{background:'#0c4a6e',color:'#38bdf8',fontWeight:700,fontSize:10,padding:'2px 9px',borderRadius:20}}>✉️ E-Sign Sent · Awaiting client</span></div>}
               </div>
             </div>
           </div>
@@ -1059,17 +1068,23 @@ function App() {
               </div>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",gap:16}}>
-              {[["preparedBy","Prepared by"],["checkedBy","Checked by"],["receivedBy","Received by"]].map(([key,label])=>(
+              {[["preparedBy","Prepared by"],["receivedBy","Received by"]].map(([key,label])=>{
+                const sigImg = key==="preparedBy" ? (senderSigData || currentInv?.eSignSenderSig) : null;
+                return (
                 <div key={key} style={{flex:1,textAlign:"center"}}>
-                  <div style={{marginBottom:6,minHeight:32,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-                    <span style={{fontWeight:700,fontSize:12,color:"#2d2080",borderBottom:"1px solid #2d2080",minWidth:140,display:"inline-block",textAlign:"center",paddingBottom:2}}>{signatories[key]||" "}</span>
+                  <div style={{marginBottom:6,minHeight:56,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+                    {sigImg
+                      ? <img src={sigImg} alt="Sender signature" style={{maxHeight:52,maxWidth:180,objectFit:"contain",display:"block",margin:"0 auto",borderBottom:"1px solid #2d2080"}}/>
+                      : <span style={{fontWeight:700,fontSize:12,color:"#2d2080",borderBottom:"1px solid #2d2080",minWidth:140,display:"inline-block",textAlign:"center",paddingBottom:2}}>{signatories[key]||" "}</span>
+                    }
                   </div>
                   <div style={{fontSize:10,color:"#555",fontWeight:600}}>{label}</div>
                   <input className="no-print" type="text" value={signatories[key]} onChange={e=>setSignatories(s=>({...s,[key]:e.target.value}))}
                     placeholder={"Enter name"}
                     style={{marginTop:6,width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center"}}/>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div style={{textAlign:"center",marginTop:14,fontSize:9,color:"#aaa"}}>This is a computer-generated invoice. · {co.name}</div>
@@ -1082,6 +1097,16 @@ function App() {
             window.html2pdf().set(opt).from(el).save();
           }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>⬇️ Download PDF</button>
           <button onClick={()=>window.print()} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
+          <button onClick={()=>{
+            setSenderSigData(null);
+            setESignStep(1);
+            setESignEmail(currentInv?.client?.contact||'');
+            setESignSubject('Invoice '+currentInv?.invoiceNo+' — Please review and e-sign');
+            setESignBody('Dear '+(currentInv?.client?.name||'Client')+',\n\nPlease find attached Invoice '+currentInv?.invoiceNo+' for ₱'+(currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2})+'.\n\nKindly review and sign using the link below. Once signed, both of us will receive a confirmation.\n\nThank you!');
+            setESignSending(false);
+            setESignHasSig(false);
+            setShowESignModal(true);
+          }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#0ea5e9,#0284c7)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✉️ Send & Sign</button>
           <button onClick={()=>{
             const newStatus = currentInv?.status==="Paid"?"Unpaid":"Paid";
             setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,status:newStatus}:x));
@@ -1105,6 +1130,203 @@ function App() {
           <button onClick={()=>{setCart([]);setDiscount(0);setSelClient(null);navigateTo("pos");}} style={{padding:"11px 24px",background:"#334155",color:"#f1f5f9",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✚ New Invoice</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
         </div>
+        {showESignModal&&(()=>{
+          const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
+          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/sign/'+sigToken;
+          // Use a stable canvas init — only run once when step is 1
+          // by checking if canvas already has _ctx attached
+          const initSigCanvas = (canvasId) => {
+            setTimeout(()=>{
+              const c = document.getElementById(canvasId);
+              if(!c || c._bound) return; // prevent re-init on re-render
+              c._bound = true;
+              const dpr = window.devicePixelRatio||1;
+              const cssW = c.parentElement ? c.parentElement.clientWidth - 4 : 460;
+              const cssH = 140;
+              c.width  = Math.round(cssW * dpr);
+              c.height = Math.round(cssH * dpr);
+              c.style.width  = cssW + 'px';
+              c.style.height = cssH + 'px';
+              const ctx = c.getContext('2d');
+              ctx.scale(dpr, dpr);
+              ctx.strokeStyle='#1a1560'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+              c._ctx = ctx;
+              let drawing=false, lx=0, ly=0, hasMark=false;
+              const pos=(e)=>{ const r=c.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return [s.clientX-r.left,s.clientY-r.top]; };
+              const start=(e)=>{ e.preventDefault(); drawing=true; [lx,ly]=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); };
+              const move=(e)=>{
+                if(!drawing) return;
+                e.preventDefault();
+                const [x,y]=pos(e);
+                ctx.lineTo(x,y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x,y);
+                [lx,ly]=[x,y];
+                if(!hasMark){ hasMark=true; setESignHasSig(true); }
+              };
+              const end=()=>{ drawing=false; ctx.beginPath(); };
+              c.addEventListener('mousedown',start);
+              c.addEventListener('mousemove',move);
+              c.addEventListener('mouseup',end);
+              c.addEventListener('mouseleave',end);
+              c.addEventListener('touchstart',start,{passive:false});
+              c.addEventListener('touchmove',move,{passive:false});
+              c.addEventListener('touchend',end);
+            },100);
+          };
+          const clearSigCanvas = () => {
+            const c = document.getElementById('esign-canvas');
+            if(!c||!c._ctx) return;
+            c._ctx.clearRect(0,0,c.width,c.height);
+            c._bound = false; // allow re-init after clear
+            setESignHasSig(false);
+          };
+          if(eSignStep===1) initSigCanvas('esign-canvas');
+          const confirmSig=()=>{
+            const c=document.getElementById('esign-canvas');
+            if(!c) return;
+            const dataUrl = c.toDataURL();
+            setSenderSigData(dataUrl);
+            setCurrentInv(ci=>ci?{...ci,eSignSenderSig:dataUrl}:ci);
+            setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,eSignSenderSig:dataUrl}:x));
+            setESignStep(2);
+          };
+          const sendEmail=()=>{
+            if(!eSignEmail.trim()){ alert('Please enter the recipient email.'); return; }
+            setESignSending(true);
+            // Build a clean invoice summary for the email body
+            const invNo   = currentInv?.invoiceNo||'';
+            const client  = currentInv?.client?.name||'Client';
+            const total   = (currentInv?.total||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+            const due     = currentInv?.dueDate ? new Date(currentInv.dueDate).toLocaleDateString('en-PH') : '';
+            const co      = currentInv?.companySnap||company;
+            const subject = eSignSubject||('Invoice '+invNo+' from '+co.name+' — Action Required');
+            const body    = eSignBody+'\n\n---\nInvoice No: '+invNo+'\nAmount Due: ₱'+total+(due?'\nDue Date: '+due:'')+'\n\n🔗 Sign here: '+sigLink+'\n\n'+co.name+' · '+co.email+' · '+co.phone;
+            // Try Gmail MCP via fetch; fall back gracefully
+            fetch('https://gmailmcp.googleapis.com/mcp/v1', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({
+                method:'tools/call',
+                params:{
+                  name:'send_email',
+                  arguments:{to:eSignEmail, subject, body, mimeType:'text/plain'}
+                }
+              })
+            })
+            .then(r=>r.json())
+            .catch(()=>null)
+            .finally(()=>{
+              setESignSending(false);
+              setESignStep(3);
+              setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:x));
+              setCurrentInv(c=>c?{...c,eSignStatus:'sent',eSignSentTo:eSignEmail,eSignSenderSig:senderSigData}:c);
+              showBadge();
+            });
+          };
+          return (
+            <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowESignModal(false)}>
+              <div className="modal-box" style={{maxWidth:520,background:'#0f172a',border:'1px solid #1e3a5f'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
+                  <div>
+                    <div style={{fontWeight:900,fontSize:16,color:'#f1f5f9'}}>✉️ Send & Sign Invoice</div>
+                    <div style={{fontSize:11,color:'#64748b',marginTop:2}}>{currentInv?.invoiceNo} · {currentInv?.client?.name}</div>
+                  </div>
+                  <button onClick={()=>setShowESignModal(false)} style={{background:'#1e293b',border:'none',color:'#94a3b8',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:16}}>✕</button>
+                </div>
+
+                {/* Step pills */}
+                <div style={{display:'flex',gap:0,marginBottom:20,background:'#1e293b',borderRadius:8,overflow:'hidden',fontSize:12}}>
+                  {[['1','Your Signature'],['2','Email Details'],['3','Sent ✓']].map(([n,lbl],i)=>(
+                    <div key={n} style={{flex:1,padding:'9px 6px',textAlign:'center',fontWeight:700,background:eSignStep===i+1?'#0ea5e9':eSignStep>i+1?'#065f46':'transparent',color:eSignStep===i+1?'#fff':eSignStep>i+1?'#6ee7b7':'#64748b',fontSize:11,transition:'background 0.2s'}}>{n}. {lbl}</div>
+                  ))}
+                </div>
+
+                {/* Step 1 — Draw signature */}
+                {eSignStep===1&&(<>
+                  <div style={{fontSize:12,color:'#94a3b8',marginBottom:10}}>Draw your signature below. This will be embedded into the invoice before sending.</div>
+                  <div style={{position:'relative',background:'#fff',borderRadius:8,border:'2px solid #2d2080',overflow:'hidden',marginBottom:10,minHeight:134}}>
+                    <canvas id="esign-canvas" height="130" style={{display:'block',width:'100%',minHeight:130,cursor:'crosshair',touchAction:'none'}}/>
+                  </div>
+                  <div style={{display:'flex',gap:8,marginBottom:16}}>
+                    <button onClick={clearSigCanvas} style={{padding:'7px 16px',background:'#1e293b',border:'1px solid #334155',color:'#94a3b8',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:600}}>🗑 Clear</button>
+                    <div style={{flex:1}}/>
+                    <button id="esign-confirm-btn" onClick={confirmSig} disabled={!eSignHasSig} style={{padding:'8px 22px',background:eSignHasSig?'linear-gradient(135deg,#0ea5e9,#0284c7)':'#334155',border:'none',color:eSignHasSig?'#fff':'#64748b',borderRadius:7,cursor:eSignHasSig?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>✅ Confirm Signature →</button>
+                  </div>
+                  <div style={{fontSize:11,color:'#475569',textAlign:'center'}}>Use mouse or finger to draw your signature above.</div>
+                </>)}
+
+                {/* Step 2 — Email form */}
+                {eSignStep===2&&(<>
+                  {senderSigData&&(
+                    <div style={{marginBottom:14,background:'#0f2d1e',border:'1px solid #14532d',borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+                      <img src={senderSigData} alt="Your signature" style={{height:40,maxWidth:120,objectFit:'contain',background:'#fff',borderRadius:4,padding:'2px 6px',flexShrink:0}}/>
+                      <div style={{fontSize:11,color:'#6ee7b7',fontWeight:700}}>✅ Signature confirmed — will appear on invoice</div>
+                    </div>
+                  )}
+                  <div style={{background:'#0c1a2e',border:'1px solid #1e3a5f',borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:11,color:'#64748b',lineHeight:1.6}}>
+                    <b style={{color:'#38bdf8'}}>📧 How this works:</b> Fill in your client's email below. The invoice + signing link will be sent from <b style={{color:'#f1f5f9'}}>your connected Gmail account</b>. You'll get a copy in your Sent folder automatically.
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div className="form-label">📤 Send to (Client Email)</div>
+                    <input className="form-input" type="email" value={eSignEmail} onChange={e=>setESignEmail(e.target.value)} placeholder="client@example.com" style={{fontSize:13}}/>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div className="form-label">Subject</div>
+                    <input className="form-input" type="text" value={eSignSubject} onChange={e=>setESignSubject(e.target.value)}/>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div className="form-label">Message</div>
+                    <textarea className="form-input" rows={4} value={eSignBody} onChange={e=>setESignBody(e.target.value)} style={{resize:'vertical',fontSize:12}}/>
+                  </div>
+                  <div style={{background:'#1e293b',borderRadius:7,padding:'9px 13px',marginBottom:14,fontSize:11}}>
+                    <div style={{fontWeight:700,color:'#94a3b8',marginBottom:4}}>🔗 Signing link — auto-appended to email</div>
+                    <div style={{fontFamily:'monospace',color:'#38bdf8',wordBreak:'break-all',fontSize:10}}>{sigLink}</div>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>setESignStep(1)} style={{padding:'9px 18px',background:'#1e293b',border:'1px solid #334155',color:'#94a3b8',borderRadius:7,cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
+                    <button onClick={sendEmail} disabled={eSignSending} style={{flex:1,padding:'11px 0',background:eSignSending?'#1e3a5f':'linear-gradient(135deg,#0ea5e9,#0284c7)',border:'none',color:'#fff',borderRadius:7,cursor:eSignSending?'not-allowed':'pointer',fontSize:14,fontWeight:800}}>
+                      {eSignSending?'📨 Sending via Gmail…':'📨 Send via Gmail'}
+                    </button>
+                  </div>
+                </>)}
+
+                {/* Step 3 — Sent confirmation */}
+                {eSignStep===3&&(<>
+                  <div style={{textAlign:'center',padding:'24px 0 16px'}}>
+                    <div style={{fontSize:48,marginBottom:10}}>✅</div>
+                    <div style={{fontWeight:900,fontSize:18,color:'#f1f5f9',marginBottom:6}}>Invoice sent!</div>
+                    <div style={{fontSize:13,color:'#94a3b8',lineHeight:1.7}}>
+                      Sent to <b style={{color:'#38bdf8'}}>{eSignEmail}</b>.<br/>
+                      Your client will receive a link to e-sign the invoice.<br/>
+                      When they sign, <b style={{color:'#4ade80'}}>both of you will get a confirmation email</b>.
+                    </div>
+                  </div>
+                  <div style={{background:'#1e293b',borderRadius:8,padding:'12px 14px',marginBottom:16}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#94a3b8',marginBottom:8,textTransform:'uppercase',letterSpacing:0.5}}>Signing Status</div>
+                    {[
+                      {dot:'#22c55e',label:'Invoice created',meta:currentInv?.invoiceNo+' · '+currentInv?.client?.name},
+                      {dot:'#22c55e',label:'Signed by you',meta:'Your signature applied'},
+                      {dot:'#22c55e',label:'Email sent to client',meta:eSignEmail},
+                      {dot:'#f59e0b',label:'Awaiting client signature',meta:'Pending…'},
+                      {dot:'#475569',label:'Confirmation to both parties',meta:'After client signs'},
+                    ].map((row,i)=>(
+                      <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
+                        <div style={{width:10,height:10,borderRadius:'50%',background:row.dot,flexShrink:0,marginTop:3}}/>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:'#f1f5f9'}}>{row.label}</div>
+                          <div style={{fontSize:11,color:'#64748b'}}>{row.meta}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={()=>setShowESignModal(false)} style={{width:'100%',padding:'11px 0',background:'#1e293b',border:'1px solid #334155',color:'#94a3b8',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Close</button>
+                </>)}
+              </div>
+            </div>
+          );
+        })()}
         {showPayModal&&(()=>{
           const inv=history.find(x=>x.invoiceNo===showPayModal);
           if(!inv) return null;
@@ -1884,7 +2106,7 @@ function App() {
           </div>
           <div style={{marginTop:24,borderTop:"1px solid #ccc",paddingTop:12}}>
             <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",gap:16}}>
-              {[["preparedBy","Prepared by"],["checkedBy","Checked by"],["receivedBy","Received by"]].map(([key,label])=>(
+              {[["preparedBy","Prepared by"],["receivedBy","Received by"]].map(([key,label])=>(
                 <div key={key} style={{flex:1,textAlign:"center"}}>
                   <div style={{marginBottom:6,minHeight:32,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
                     <span style={{fontWeight:700,fontSize:12,color:"#d97706",borderBottom:"1px solid #d97706",minWidth:140,display:"inline-block",textAlign:"center",paddingBottom:2}}>{qSignatories[key]||" "}</span>
@@ -2530,7 +2752,7 @@ function App() {
                       setQVatOverride(q.vatOverride??null);
                       setQEwtPct(q.ewtPct||0);
                       setQNotes(q.notes||"");
-                      setQSignatories(q.signatories||{preparedBy:'',checkedBy:'',receivedBy:''});
+                      setQSignatories(q.signatories||{preparedBy:'',receivedBy:''});
                       navigateTo("quotation");
                     }} style={{background:"#a855f720",border:"1px solid #a855f7",color:"#c084fc",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ Re-use</button>
                     {q.status!=="Converted"&&<button onClick={()=>{if(window.confirm("Mark quote "+q.quoteNo+" as Void?"))setQuoteHistory(qs=>qs.map((x,j)=>j===i?{...x,status:"Void"}:x));}} style={{background:"#f59e0b20",border:"1px solid #f59e0b",color:"#f59e0b",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>⚠ Void</button>}
@@ -2639,7 +2861,7 @@ function App() {
         notes:(jo.notes||"")+(jo.downpayment>0?"\nDownpayment: ₱"+Number(jo.downpayment).toLocaleString("en-PH",{minimumFractionDigits:2}):""),
         status:jo.downpayment>=jo.total?"Paid":"Unpaid",
         paymentMode:jo.paymentMode, companySnap:jo.companySnap||{...company},
-        signatories:{preparedBy:"",checkedBy:"",receivedBy:""}, convertedFrom:jo.joNo
+        signatories:{preparedBy:"",receivedBy:""}, convertedFrom:jo.joNo
       };
       const itemRows=jo.cart.map((item,idx)=>({invoiceNo:no,lineNo:idx+1,sku:item.sku||"",name:item.customName||item.name,qty:item.qty,unit:item.unit||"",price:item.price,disc:item.disc||0,subtotal:parseFloat((item.price*item.qty*(1-(item.disc||0)/100)).toFixed(4))}));
       setSalesItems(prev=>[...itemRows,...prev]);

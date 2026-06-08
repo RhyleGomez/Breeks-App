@@ -560,6 +560,11 @@ function App() {
   const [currentInv,  setCurrentInv]  = useState(null); // local only — no GAS round-trip
   const [editInv,     setEditInv]     = useState(null); // local only — no GAS round-trip
   const [view,        setView]        = useState("pos"); // local only — no GAS round-trip on navigation
+  // ── Client signing mode (?sign=INV-XXXX) ──────────────────────────────────
+  const [signMode,    setSignMode]    = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("sign") || null;
+  });
   const TAB_LABELS = {
     pos:"🧾 POS", receipt:"🧾 Receipt", history:"📋 Invoice History",
     ledger:"📒 Ledger", reports:"📊 Reports", quotation:"📝 Quotation",
@@ -1218,7 +1223,8 @@ function App() {
                         const invNo = currentInv?.invoiceNo||"";
                         const clientName = currentInv?.client?.name||"Client";
                         const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find below the details for Invoice ${invNo}.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nThis invoice has been signed and acknowledged by the receiver.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+                        const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
+                        const msgBody = `Dear ${clientName},\n\nThank you for your business. Please find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\n──────────────────────────────\n📄 VIEW & SIGN YOUR INVOICE:\n${signLink}\n──────────────────────────────\n\nPlease open the link above to review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
                         emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
                           .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
                           .catch(()=>{setInvEmailSending(false);alert("Email send failed. Check client email address.");});
@@ -1259,7 +1265,8 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const clientName = currentInv?.client?.name||"Client";
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-            const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nKindly review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
+            const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: ₱${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\n──────────────────────────────\n📄 VIEW & SIGN YOUR INVOICE:\n${signLink}\n──────────────────────────────\n\nPlease open the link above to review and sign the invoice at your earliest convenience.\n\nFor questions, please contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
             setInvEmailSending(true);
             emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} – Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
               .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("✅ Invoice sent to "+clientEmail);})
@@ -4874,6 +4881,132 @@ function App() {
       </div>
     );
   }
+  // ── Client Signing View ────────────────────────────────────────────────────
+  if (signMode) {
+    const signInv = history.find(x => x.invoiceNo === signMode);
+    const co = signInv?.companySnap || company;
+    const fmt = d => new Date(d).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"});
+    const [clientSigned, setClientSigned] = useState(!!signInv?.recvSign);
+    const [clientSig, setClientSig] = useState(signInv?.recvSign || null);
+    const [clientName, setClientName] = useState(signInv?.signatories?.receivedBy || signInv?.client?.name || "");
+    if (!signInv) return (
+      <div style={{minHeight:"100vh",background:"#f8fafc",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,sans-serif"}}>
+        <div style={{textAlign:"center",padding:40}}>
+          <div style={{fontSize:48,marginBottom:16}}>🔍</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#1e293b",marginBottom:8}}>Invoice Not Found</div>
+          <div style={{fontSize:14,color:"#64748b"}}>Invoice <b>{signMode}</b> could not be located.<br/>Please contact Breeks Digital.</div>
+        </div>
+      </div>
+    );
+    return (
+      <div style={{minHeight:"100vh",background:"#f0f4ff",fontFamily:"'Segoe UI',system-ui,sans-serif",padding:"24px 16px"}}>
+        <div style={{maxWidth:620,margin:"0 auto 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{background:"#2d2080",color:"#fff",fontWeight:900,fontSize:18,padding:"6px 14px",borderRadius:8,letterSpacing:2}}>BREEKS</div>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#2d2080"}}>{co.name||"Breeks Digital"}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>{co.tagline||""}</div>
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:11,color:"#64748b"}}>Invoice</div>
+            <div style={{fontSize:18,fontWeight:900,color:"#2d2080"}}>{signInv.invoiceNo}</div>
+          </div>
+        </div>
+        <div style={{maxWidth:620,margin:"0 auto",background:"#fff",borderRadius:14,boxShadow:"0 4px 24px rgba(45,32,128,0.10)",overflow:"hidden"}}>
+          <div style={{background:clientSigned?"#16a34a":"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>
+            {clientSigned ? "✅ Invoice Acknowledged & Signed" : "✍️ Your Signature is Required"}
+          </div>
+          <div style={{padding:"18px 20px 12px",borderBottom:"1px solid #e2e8f0"}}>
+            <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:4}}>BILLED TO</div>
+            <div style={{fontSize:16,fontWeight:800,color:"#1e293b"}}>{signInv.client?.name||"Client"}</div>
+            {signInv.client?.address&&<div style={{fontSize:12,color:"#64748b",marginTop:2}}>{signInv.client.address}</div>}
+          </div>
+          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0",display:"flex",gap:24,flexWrap:"wrap"}}>
+            {[["Invoice No",signInv.invoiceNo],["Date",fmt(signInv.date)],["Due Date",fmt(signInv.dueDate)],["Payment Mode",signInv.paymentMode||"Cash"]].map(([k,v])=>(
+              <div key={k}>
+                <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,textTransform:"uppercase"}}>{k}</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0"}}>
+            <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:8}}>ITEMS</div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:"#f1f5f9"}}>
+                {["Description","Qty","Unit Price","Amount"].map((h,i)=><th key={h} style={{padding:"6px 8px",textAlign:i>0?"right":"left",fontWeight:700,color:"#475569",fontSize:11}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {(signInv.cart||[]).map((item,i)=>(
+                  <tr key={i} style={{borderBottom:"1px solid #f1f5f9"}}>
+                    <td style={{padding:"6px 8px",color:"#1e293b",fontWeight:600}}>{item.customName||item.name}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#64748b"}}>{item.qty}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#64748b"}}>₱{Number(item.price||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#2d2080"}}>₱{Number((item.qty||0)*(item.price||0)).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"flex-end"}}>
+            <div style={{background:"#2d2080",color:"#fff",borderRadius:8,padding:"10px 20px",minWidth:220}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:32,fontSize:15,fontWeight:900}}>
+                <span>TOTAL AMOUNT</span>
+                <span>₱{Number(signInv.total||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span>
+              </div>
+            </div>
+          </div>
+          {signInv.prepSign && (
+            <div style={{padding:"12px 20px",borderBottom:"1px solid #e2e8f0"}}>
+              <div style={{textAlign:"center"}}>
+                <img src={signInv.prepSign} alt="prep-sig" style={{maxHeight:56,maxWidth:160,objectFit:"contain",display:"block",margin:"0 auto"}}/>
+                <div style={{height:1,background:"#2d2080",margin:"4px auto",width:160}}></div>
+                <div style={{fontSize:10,fontWeight:700,color:"#2d2080"}}>Prepared by</div>
+                <div style={{fontSize:11,color:"#475569"}}>{signInv.signatories?.preparedBy||co.name||"Breeks Digital"}</div>
+              </div>
+            </div>
+          )}
+          <div style={{padding:"20px"}}>
+            {clientSigned ? (
+              <div style={{textAlign:"center",padding:20}}>
+                <div style={{fontSize:36,marginBottom:8}}>✅</div>
+                <div style={{fontSize:16,fontWeight:800,color:"#16a34a",marginBottom:4}}>Invoice Acknowledged</div>
+                <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Signed by <b>{clientName}</b></div>
+                <img src={clientSig} alt="client-sig" style={{maxHeight:70,maxWidth:220,objectFit:"contain",border:"1px solid #e2e8f0",borderRadius:8,display:"block",margin:"0 auto 8px"}}/>
+                <div style={{fontSize:11,color:"#94a3b8"}}>You may close this window.</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:4}}>Sign to Acknowledge Receipt</div>
+                <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>By signing below, you confirm receipt of the goods/services listed in this invoice.</div>
+                <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)}
+                  placeholder="Your full name (required)"
+                  style={{width:"100%",padding:"9px 12px",border:"1.5px solid #c0cfe8",borderRadius:8,fontSize:13,color:"#1e293b",marginBottom:10,boxSizing:"border-box"}}/>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature:</div>
+                <SignaturePad color="#2d2080" savedSig={clientSig}
+                  onSave={sig => {
+                    if (!clientName.trim()) { alert("Please enter your name before signing."); return; }
+                    setClientSig(sig);
+                    setClientSigned(true);
+                    const updated = history.map(x => x.invoiceNo === signMode
+                      ? {...x, recvSign:sig, emailSent:true, signatories:{...x.signatories, receivedBy:clientName}}
+                      : x);
+                    setHistory(updated);
+                    try { localStorage.setItem("pos_history", JSON.stringify(updated)); } catch(e){}
+                  }}
+                  onClear={()=>setClientSig(null)}/>
+                <div style={{marginTop:10,fontSize:11,color:"#94a3b8",textAlign:"center"}}>🔒 Your signature is securely linked to this invoice only.</div>
+              </div>
+            )}
+          </div>
+          <div style={{padding:"10px 20px",background:"#f8fafc",textAlign:"center",fontSize:10,color:"#94a3b8"}}>
+            {co.name||"Breeks Digital"} · {co.address||""} · {co.phone||""} · This is a computer-generated invoice.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="pos-area" style={{height:openTabs.length>1?"calc(100vh - 34px)":"100vh",background:"var(--bg)",display:"flex",flexDirection:"column",overflow:"hidden",marginTop:openTabs.length>1?34:0}}>
       {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}

@@ -836,6 +836,13 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const signParam = urlParams.get('sign');
   const invParam  = urlParams.get('inv');
+  const invDataParam = urlParams.get('d');
+  // Decode invoice from URL payload (works on any device)
+  const decodedInv = React.useMemo(()=>{
+    if(!invDataParam) return null;
+    try { return JSON.parse(decodeURIComponent(escape(atob(invDataParam)))); }
+    catch(e){ return null; }
+  },[invDataParam]);
   const [clientSigDone, setClientSigDone] = React.useState(false);
   const [clientHasSig,  setClientHasSig]  = React.useState(false);
   const [clientSigData, setClientSigData] = React.useState(null);
@@ -864,8 +871,8 @@ function App() {
   };
   if(signParam && !clientSigDone) {
     initClientCanvas();
-    const matchedInv = history.find(x=>x.invoiceNo===invParam);
-    const co = {...(matchedInv?.companySnap||company), ...company};
+    const matchedInv = history.find(x=>x.invoiceNo===invParam) || decodedInv;
+    const co = {...(matchedInv?.companySnap||company), ...(matchedInv?.companySnap||company)};
     return (
       <div style={{minHeight:'100vh',background:'#f0f4f8',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'Roboto',sans-serif"}}>
         <div style={{background:'#fff',borderRadius:14,boxShadow:'0 8px 40px rgba(0,0,0,0.12)',padding:32,width:'100%',maxWidth:560}}>
@@ -917,9 +924,9 @@ function App() {
     );
   }
   if(signParam && clientSigDone) {
-    const matchedInv = history.find(x=>x.invoiceNo===invParam);
-    const co = {...(matchedInv?.companySnap||company), ...company};
-    const senderSig = matchedInv?.eSignSenderSig;
+    const matchedInv = history.find(x=>x.invoiceNo===invParam) || decodedInv;
+    const co = {...(matchedInv?.companySnap||company), ...(matchedInv?.companySnap||company)};
+    const senderSig = matchedInv?.eSignSenderSig || decodedInv?.eSignSenderSig;
     const signedAt  = new Date().toLocaleString('en-PH');
 
     const downloadSignedPdf = () => {
@@ -1384,7 +1391,28 @@ function App() {
         </div>
         {showESignModal&&(()=>{
           const sigToken = currentInv?.invoiceNo+'-'+Math.random().toString(36).slice(2,8);
-          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo;
+          // Encode essential invoice data into URL so client can reconstruct on any device
+          const invPayload = btoa(unescape(encodeURIComponent(JSON.stringify({
+            invoiceNo: currentInv?.invoiceNo,
+            date: currentInv?.date,
+            dueDate: currentInv?.dueDate,
+            client: currentInv?.client,
+            cart: currentInv?.cart,
+            subtotal: currentInv?.subtotal,
+            vatTotal: currentInv?.vatTotal,
+            globalDisc: currentInv?.globalDisc,
+            discount: currentInv?.discount,
+            ewtPct: currentInv?.ewtPct,
+            ewtAmt: currentInv?.ewtAmt,
+            otherCharges: currentInv?.otherCharges,
+            total: currentInv?.total,
+            notes: currentInv?.notes,
+            paymentMode: currentInv?.paymentMode,
+            paymentTerms: currentInv?.paymentTerms,
+            companySnap: currentInv?.companySnap||company,
+            eSignSenderSig: currentInv?.eSignSenderSig||senderSigData,
+          }))));
+          const sigLink  = 'https://rhylegomez.github.io/Breeks-App/?sign='+sigToken+'&inv='+currentInv?.invoiceNo+'&d='+invPayload;
           // Use a stable canvas init — only run once when step is 1
           // by checking if canvas already has _ctx attached
           const initSigCanvas = (canvasId) => {

@@ -316,13 +316,17 @@ function useCloudState(key, def, loaded, cloudData) {
     return def;
   });
   const initialized = useRef(false);
-  const cloudDataRef = useRef(cloudData);
-  // On first load, apply cloud value once — for lazy keys, wait until cloudData actually has the key
+  // Apply cloud value exactly ONCE per key — on first load when the value is available.
+  // Using a ref to track the last cloudData[key] we applied so we only fire on the
+  // transition from undefined → value (i.e. lazy data arriving), never afterwards.
+  const appliedCloudVal = useRef(undefined);
   useEffect(() => {
     if (!loaded) return;
-    if (initialized.current) return; // never overwrite after first apply
+    if (initialized.current) return; // already applied — never overwrite local state again
     const cloudVal = cloudData[key];
     if (cloudVal === null || cloudVal === undefined) return;
+    if (cloudVal === appliedCloudVal.current) return; // same reference, skip
+    appliedCloudVal.current = cloudVal;
     initialized.current = true;
     if (key === 'pos_cart' && Array.isArray(cloudVal)) {
       setValRaw(cloudVal.map(item => item.lineId ? item : {...item, lineId:'line_'+Math.random().toString(36).slice(2,10)}));

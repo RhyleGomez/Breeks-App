@@ -314,19 +314,27 @@ function useCloudState(key, def, loaded, cloudData) {
     return def;
   });
   const initialized = useRef(false);
+  // Apply cloud value on first load (critical data) AND again if lazy data arrives later
   useEffect(() => {
-    if (loaded && !initialized.current) {
+    if (!loaded) return;
+    const cloudVal = cloudData[key];
+    if (cloudVal === null || cloudVal === undefined) return;
+    // Always apply if not yet initialized; also re-apply for history/counter keys when lazy data arrives
+    const isLazyKey = key === 'pos_history' || key === 'pos_q_history' ||
+                      key === 'pos_jo_history' || key === 'pos_dr_history' ||
+                      key === 'pos_po_history' || key === 'pos_inv_counter' ||
+                      key === 'pos_q_counter' || key === 'pos_jo_counter' ||
+                      key === 'pos_dr_counter' || key === 'pos_po_counter' ||
+                      key === 'pos_sales_items' || key === 'pos_payments';
+    if (!initialized.current || isLazyKey) {
       initialized.current = true;
-      const cloudVal = cloudData[key];
-      if (cloudVal !== null && cloudVal !== undefined) {
-        if (key === 'pos_cart' && Array.isArray(cloudVal)) {
-          setValRaw(cloudVal.map(item => item.lineId ? item : {...item, lineId:'line_'+Math.random().toString(36).slice(2,10)}));
-        } else {
-          setValRaw(cloudVal);
-        }
+      if (key === 'pos_cart' && Array.isArray(cloudVal)) {
+        setValRaw(cloudVal.map(item => item.lineId ? item : {...item, lineId:'line_'+Math.random().toString(36).slice(2,10)}));
+      } else {
+        setValRaw(cloudVal);
       }
     }
-  }, [loaded]);
+  }, [loaded, cloudData]);
   const set = useCallback((updater) => {
     setValRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;

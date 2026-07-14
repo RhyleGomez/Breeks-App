@@ -371,6 +371,13 @@ function closeTop(){
   if(id)document.getElementById(id).classList.remove('open');
 }
 window.addEventListener('popstate',()=>{ if(layerStack.length)closeTop(); });
+function bindBackdrop(id,fn){
+  const ov=document.getElementById(id);let down=false;
+  ov.addEventListener('mousedown',e=>{down=(e.target===ov);});
+  ov.addEventListener('touchstart',e=>{down=(e.target===ov);},{passive:true});
+  ov.addEventListener('click',e=>{if(e.target===ov&&down)fn();down=false;});
+}
+
 function goHome(){
   while(layerStack.length)closeTop();
   setView('products');
@@ -483,7 +490,7 @@ function openModal(id){
   openLayer('overlay');
 }
 function closeModal(){closeTop();}
-document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
+bindBackdrop('overlay',closeModal);
 
 function addSupplierLine(s,checked){
   s=s||{name:'',cost:''};
@@ -586,7 +593,7 @@ function openLibPicker(target){
   openLayer('libOverlay');
 }
 function pickFromLib(id){assignPhoto(id);closeTop();}
-document.getElementById('libOverlay').addEventListener('click',e=>{if(e.target.id==='libOverlay')closeTop();});
+bindBackdrop('libOverlay',closeTop);
 function delImage(id){
   const used=products.filter(p=>p.imgId===id).length+sets.filter(s=>s.imgId===id).length;
   if(!confirm(used?('This image is used by '+used+' product(s)/set(s). Delete anyway?'):'Delete this image?'))return;
@@ -612,7 +619,7 @@ function openSetModal(id){
   openLayer('setOverlay');
 }
 function closeSetModal(){closeTop();}
-document.getElementById('setOverlay').addEventListener('click',e=>{if(e.target.id==='setOverlay')closeSetModal();});
+bindBackdrop('setOverlay',closeSetModal);
 
 function addItemLine(it){
   it=it||{productId:'',qty:1};
@@ -731,7 +738,7 @@ function openSetSummary(id){
     '<button class="b-save" onclick="closeTop();openSetModal(\''+s.id+'\')">Edit</button></div>';
   openLayer('sumOverlay');
 }
-document.getElementById('sumOverlay').addEventListener('click',e=>{if(e.target.id==='sumOverlay')closeTop();});
+bindBackdrop('sumOverlay',closeTop);
 
 /* ---------- EXPORT / IMPORT ---------- */
 function download(name,content,type){

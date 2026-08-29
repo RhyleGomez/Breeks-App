@@ -277,9 +277,22 @@ function printPo(po){
 const { useState, useEffect, useCallback, useRef } = React;
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx2_JIgJr7AaoWZ1ZVSlOIYixgef2VPQ6TlgU6bUANQ-4sKaDz6u-OUJLGkFSUIgoIk/exec';
 const GAS = {
+  // Sent as a POST with the fn/args in the request BODY (not a query string).
+  // GET calls were breaking for any real-sized payload (a full product list,
+  // a big invoice history, etc.) because the args got JSON-stringified into
+  // the URL — long invoices/product lists pushed the URL past a length limit
+  // somewhere in Google's request pipeline and the call died with a silent
+  // 400. POST has no such limit. Content-Type is deliberately 'text/plain'
+  // (not 'application/json') so the browser doesn't send a CORS preflight
+  // OPTIONS request first — Apps Script web apps don't handle OPTIONS, so a
+  // preflight there fails every single call outright.
   call: (fn, ...args) => {
-    const params = new URLSearchParams({ fn, args: JSON.stringify(args) });
-    return fetch(`${GAS_URL}?${params}`, { redirect: 'follow' })
+    return fetch(GAS_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fn, args })
+    })
       .then(r => r.json())
       .catch(e => { console.warn('GAS call failed:', fn, e); return null; });
   }
@@ -308,8 +321,15 @@ const clearPending = (key) => {
   } catch (e) {}
 };
 const gasCallRaw = (fn, ...args) => {
-  const params = new URLSearchParams({ fn, args: JSON.stringify(args) });
-  return fetch(`${GAS_URL}?${params}`, { redirect: 'follow' }).then(r => r.json());
+  // Same POST-body approach as GAS.call above — this is the path saveKey
+  // actually goes through, so it's the one that most needed to stop using a
+  // GET query string.
+  return fetch(GAS_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ fn, args })
+  }).then(r => r.json());
 };
 const saveKeyWithRetry = (key, value, attempt) => {
   attempt = attempt || 0;

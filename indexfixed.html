@@ -286,21 +286,142 @@ const GAS = {
 };
 const _writeQueue = {};
 const _writeTimers = {};
+// ── Pending-write tracking + retry ───────────────────────────────────────
+// If a save to the cloud (Google Sheet) never completes — the tab/browser is
+// closed before the debounce fires, the network drops, Apps Script is slow —
+// the change would previously be silently lost from the cloud copy forever.
+// We mark keys as "pending" in localStorage, retry with backoff, and flush
+// immediately when the page is about to close/hide so same-day work has the
+// best chance of reaching the cloud before the tab disappears.
+const PENDING_WRITES_KEY = '__pos_pending_writes__';
+const markPending = (key) => {
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
+    if (!pending.includes(key)) { pending.push(key); localStorage.setItem(PENDING_WRITES_KEY, JSON.stringify(pending)); }
+  } catch (e) {}
+};
+const clearPending = (key) => {
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
+    const next = pending.filter(k => k !== key);
+    localStorage.setItem(PENDING_WRITES_KEY, JSON.stringify(next));
+  } catch (e) {}
+};
+const gasCallRaw = (fn, ...args) => {
+  const params = new URLSearchParams({ fn, args: JSON.stringify(args) });
+  return fetch(`${GAS_URL}?${params}`, { redirect: 'follow' }).then(r => r.json());
+};
+const saveKeyWithRetry = (key, value, attempt) => {
+  attempt = attempt || 0;
+  gasCallRaw('saveKey', key, JSON.stringify(value)).then(() => {
+    clearPending(key);
+  }).catch(e => {
+    console.warn('Cloud save failed (attempt ' + (attempt + 1) + '):', key, e);
+    if (attempt < 4) {
+      setTimeout(() => saveKeyWithRetry(key, value, attempt + 1), 1500 * (attempt + 1));
+    } else {
+      console.warn('Giving up on cloud save for now — will retry next time the app loads:', key);
+      // Left marked pending on purpose: the next app load's flushPendingLocalWrites() will retry it.
+    }
+  });
+};
 const debouncedSave = (key, value) => {
   _writeQueue[key] = value;
+  markPending(key);
   if (_writeTimers[key]) clearTimeout(_writeTimers[key]);
   _writeTimers[key] = setTimeout(() => {
-    GAS.call('saveKey', key, JSON.stringify(_writeQueue[key]))
-      .catch(e => console.warn('Debounced save error:', key, e));
+    saveKeyWithRetry(key, _writeQueue[key]);
     LS.set(key, _writeQueue[key]);
     delete _writeQueue[key];
     delete _writeTimers[key];
   }, 800);
 };
+// Force any debounced-but-not-yet-sent saves out immediately when the tab is
+// about to be hidden/closed, instead of waiting out the 800ms debounce.
+const flushPendingLocalWrites = () => {
+  Object.keys(_writeTimers).forEach(key => {
+    clearTimeout(_writeTimers[key]);
+    delete _writeTimers[key];
+    if (_writeQueue.hasOwnProperty(key)) {
+      saveKeyWithRetry(key, _writeQueue[key]);
+      delete _writeQueue[key];
+    }
+  });
+};
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushPendingLocalWrites);
+  window.addEventListener('beforeunload', flushPendingLocalWrites);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingLocalWrites();
+  });
+  // On a fresh load, re-attempt any writes that never made it to the cloud
+  // last session (e.g. the tab was closed before the debounce/save finished).
+  setTimeout(() => {
+    try {
+      const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
+      pending.forEach(key => {
+        const val = LS.get(key, null);
+        if (val !== null) saveKeyWithRetry(key, val);
+      });
+    } catch (e) {}
+  }, 1500);
+}
 const LS = {
   get: (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } },
   set: (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
 const isGAS = () => true;
+// ── Non-destructive cloud merge ──────────────────────────────────────────
+// Counters and history-like lists must never go BACKWARDS just because the
+// cloud copy (Google Sheet) is behind — e.g. because a previous save never
+// made it up (tab closed early, network drop, Apps Script hiccup). Instead
+// of blindly trusting whichever value the cloud returns, we fold it into
+// whatever this device already has: counters take the higher of the two,
+// and lists are unioned by their natural ID so an invoice/quote already
+// created on this device can never be silently erased by a stale cloud read.
+const COUNTER_KEYS = new Set(['pos_inv_counter','pos_q_counter','pos_dr_counter','pos_jo_counter','pos_po_counter']);
+const LIST_ID_GETTERS = {
+  pos_history:      x => x && x.invoiceNo,
+  pos_q_history:    x => x && x.quoteNo,
+  pos_dr_history:   x => x && x.drNo,
+  pos_jo_history:   x => x && x.joNo,
+  pos_po_history:   x => x && x.poNo,
+  pos_sales_items:  x => x && (x.invoiceNo + '_' + x.lineNo),
+  pos_payments:     x => x && x.id,
+};
+const mergeListsById = (local, cloud, idFn) => {
+  const localArr = Array.isArray(local) ? local : [];
+  const cloudArr = Array.isArray(cloud) ? cloud : [];
+  if (localArr.length === 0) return cloudArr;
+  if (cloudArr.length === 0) return localArr;
+  const map = new Map();
+  cloudArr.forEach(item => { const id = idFn(item); if (id) map.set(id, item); });
+  // Local wins on id collisions — this device's copy reflects whatever it
+  // has done most recently (e.g. a signature capture, a status change).
+  localArr.forEach(item => { const id = idFn(item); if (id) map.set(id, item); });
+  const merged = Array.from(map.values());
+  merged.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
+  return merged;
+};
+// ── Product SKU hygiene ───────────────────────────────────────────────────
+// The POS/Quotation/Job Order/Delivery Receipt product pickers all match
+// "already added to this cart?" purely by SKU, and React keys the product
+// grid by SKU too. If two products share a SKU (or both have a blank SKU —
+// easy to end up with from a spreadsheet import), clicking one of them can
+// silently bump the quantity of a completely different product instead of
+// adding a new line, or the product may not render as its own grid item at
+// all. This guarantees every product has a unique, non-blank SKU before it
+// ever reaches the UI.
+const sanitizeProducts = (list) => {
+  const seen = {};
+  return (Array.isArray(list) ? list : []).map((p, idx) => {
+    let sku = (p && p.sku != null ? String(p.sku) : "").trim();
+    if (!sku) sku = "SKU-" + (idx + 1);
+    let finalSku = sku, n = 1;
+    while (seen[finalSku]) { n++; finalSku = sku + "-" + n; }
+    seen[finalSku] = true;
+    return finalSku === p.sku ? p : {...p, sku: finalSku};
+  });
+};
 const peso = n => "₱" + Number(n).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = d => new Date(d).toLocaleDateString("en-PH",{day:"2-digit",month:"short",year:"numeric"});
 const CAT_COLORS = { Signage:"#2d2080", Stickers:"#0891b2", Industrial:"#d97706", Apparel:"#9333ea", Services:"#16a34a", "Print Labels":"#e11d48", Print:"#e11d48" };
@@ -332,6 +453,15 @@ function useCloudState(key, def, loaded, cloudData) {
       initialized.current = true;
       if (key === 'pos_cart' && Array.isArray(cloudVal)) {
         setValRaw(cloudVal.map(item => item.lineId ? item : {...item, lineId:'line_'+Math.random().toString(36).slice(2,10)}));
+      } else if (COUNTER_KEYS.has(key)) {
+        // Never let a stale/behind cloud counter roll the local one backwards.
+        setValRaw(prevLocal => Math.max(Number(cloudVal) || 1, Number(prevLocal) || 1));
+      } else if (LIST_ID_GETTERS[key]) {
+        // Union with the cloud copy instead of replacing — nothing already
+        // created on this device can disappear just because the cloud is behind.
+        setValRaw(prevLocal => mergeListsById(prevLocal, cloudVal, LIST_ID_GETTERS[key]));
+      } else if (key === 'pos_products' && Array.isArray(cloudVal)) {
+        setValRaw(sanitizeProducts(cloudVal));
       } else {
         setValRaw(cloudVal);
       }
@@ -547,7 +677,7 @@ function App() {
         }).catch(e => console.warn('Lazy load error:', e));
         GAS.call('getProductsFromSheet').then(res => {
           if (res && res.ok && res.products && res.products.length > 0) {
-            setProducts(res.products);
+            setProducts(sanitizeProducts(res.products));
           }
         });
       }).catch(e => {
@@ -803,7 +933,7 @@ function App() {
   const genLineId = () => 'line_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   const addToCart = p => {
     setCart(prev => {
-      const ex = prev.find(i=>i.sku===p.sku);
+      const ex = p.sku && prev.find(i=>i.sku===p.sku);
       if(ex) return prev.map(i=>i.lineId===ex.lineId?{...i,qty:i.qty+1}:i);
       const autoDim = !!p.dimBased;
       return [...prev,{...p,lineId:genLineId(),qty:1,disc:0,dimMode:autoDim,dimW:"",dimH:"",dimUnit:"ft",ratePerSqFt:p.price,customName:"",lineNote:"",minPrice:p.minPrice||0}];
@@ -1711,7 +1841,7 @@ function App() {
     );
     const addToQCart = p => {
       setQCart(prev=>{
-        const ex=prev.find(i=>i.sku===p.sku);
+        const ex=p.sku && prev.find(i=>i.sku===p.sku);
         if(ex) return prev.map(i=>i.lineId===ex.lineId?{...i,qty:i.qty+1}:i);
         const autoDim = !!p.dimBased;
         return [...prev,{...p,lineId:genLineId(),qty:1,disc:0,dimMode:autoDim,dimW:"",dimH:"",dimUnit:"ft",ratePerSqFt:p.price,customName:"",minPrice:p.minPrice||0}];
@@ -2843,7 +2973,7 @@ function App() {
     );
     const addToJoCart = p => {
       setJoCart(prev=>{
-        const ex=prev.find(i=>i.sku===p.sku);
+        const ex=p.sku && prev.find(i=>i.sku===p.sku);
         if(ex) return prev.map(i=>i.sku===p.sku?{...i,qty:i.qty+1}:i);
         return [...prev,{...p,lineId:'jo_'+Math.random().toString(36).slice(2,10),qty:1,disc:0,customName:"",lineNote:"",dimMode:false,dimW:"",dimH:"",dimUnit:"ft",ratePerSqFt:0}];
       });
@@ -3293,7 +3423,7 @@ function App() {
     );
     const addToDrCart = p => {
       setDrCart(prev=>{
-        const ex=prev.find(i=>i.sku===p.sku);
+        const ex=p.sku && prev.find(i=>i.sku===p.sku);
         if(ex) return prev.map(i=>i.lineId===ex.lineId?{...i,qty:i.qty+1}:i);
         return [...prev,{...p,lineId:genLineId(),qty:1,customName:""}];
       });

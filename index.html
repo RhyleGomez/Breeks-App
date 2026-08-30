@@ -1451,7 +1451,7 @@ function App() {
     const eTdAlt = (extra={})=>({padding:"7px 10px",border:"1px solid #dde3ef",background:"#e8eef7",verticalAlign:"middle",color:"#111",...extra});
     return (
       <div style={{minHeight:"100vh",background:"#f0f4f8",display:"flex",flexDirection:"column"}}>
-        {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
+        {badge&&<div className="save-badge">✅ Saved</div>}
         <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 24px",display:"flex",alignItems:"center",gap:14,flexShrink:0,boxShadow:"0 2px 16px rgba(0,0,0,0.4)",borderBottom:"2px solid var(--brand-cyan)"}}>
           <button onClick={()=>{setEditInv(null);setShowPicker(false);navigateTo("history");}} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.25)",color:"#fff",borderRadius:7,padding:"7px 16px",fontWeight:700,cursor:"pointer",fontSize:13}}>✕ Cancel</button>
           <div>
@@ -2201,7 +2201,7 @@ function App() {
     const balance     = inv => (inv.total||0) - amountPaid(inv);
     return (
     <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-      {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
+      {badge&&<div className="save-badge">✅ Saved</div>}
       <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid var(--brand-cyan)",flexWrap:"wrap"}}>
         <button onClick={()=>navigateTo("pos")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← POS</button>
         <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📋 Invoice History</div>
@@ -3964,7 +3964,7 @@ function App() {
     const displayProds = prodCatFilter==="All" ? filteredProds : filteredProds.filter(p=>p.category===prodCatFilter);
     return (
     <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-      {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
+      {badge&&<div className="save-badge">✅ Saved</div>}
       <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid var(--brand-cyan)",flexWrap:"wrap"}}>
         <button onClick={()=>navigateTo("pos")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← POS</button>
         <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📦 Products ({products.length})</div>
@@ -4095,7 +4095,7 @@ function App() {
     const filteredClis = clients.filter(c=>c.name.toLowerCase().includes(cliSearch.toLowerCase())||(c.contact&&c.contact.toLowerCase().includes(cliSearch.toLowerCase()))||(c.phone&&c.phone.includes(cliSearch))||(c.address&&c.address.toLowerCase().includes(cliSearch.toLowerCase())));
     return (
     <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-      {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
+      {badge&&<div className="save-badge">✅ Saved</div>}
       <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid var(--brand-cyan)",flexWrap:"wrap"}}>
         <button onClick={()=>navigateTo("pos")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← POS</button>
         <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>👥 Manage Clients ({clients.length})</div>
@@ -5155,7 +5155,7 @@ function App() {
 
   return (
     <div id="pos-area" style={{height:openTabs.length>1?"calc(100vh - 34px)":"100vh",background:"var(--bg)",display:"flex",flexDirection:"column",overflow:"hidden",marginTop:openTabs.length>1?34:0}}>
-      {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
+      {badge&&<div className="save-badge">✅ Saved</div>}
       {openTabs.length>1&&(
         <div style={{position:"fixed",top:0,left:0,right:0,zIndex:500,display:"flex",alignItems:"stretch",background:"#0a0820",borderBottom:"2px solid var(--brand-border)",height:34,overflowX:"auto",overflowY:"hidden"}}>
           {openTabs.map(tab=>(
@@ -5205,7 +5205,7 @@ function App() {
         ))}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
           <div style={{fontSize:11,color:"#93b4d8",fontWeight:600,letterSpacing:0.5}}>
-            ☁️ <span style={{color:"#00b8d4"}}>Auto-saving to Google Drive</span>
+            💾 <span style={{color:"#00b8d4"}}>Saved on this computer</span>
           </div>
           <button onClick={()=>{setCoForm({...company});setShowCompany(true);}} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#c0cfe8",borderRadius:7,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>⚙️ Company</button>
         </div>

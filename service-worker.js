@@ -1,4 +1,4 @@
-const CACHE_NAME = 'breeks-app-v2';
+const CACHE_NAME = 'breeks-app-v3';
 const ASSETS = [
   '/Breeks-App/',
   '/Breeks-App/index.html',

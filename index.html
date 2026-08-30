@@ -57,10 +57,6 @@
   .form-label { font-size:11px; color:var(--brand-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
   .print-only { display: none; }
   .save-badge { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--brand-cyan); color:#fff; padding:9px 22px; border-radius:20px; font-size:13px; font-weight:700; z-index:999; pointer-events:none; box-shadow:0 4px 16px rgba(0,184,212,0.5); }
-  .sync-indicator { position:fixed; top:12px; right:16px; font-size:11px; font-weight:700; padding:4px 12px; border-radius:12px; z-index:999; pointer-events:none; }
-  .sync-saving { background:#f59e0b; color:#fff; }
-  .sync-saved { background:#22c55e; color:#fff; }
-  .sync-error { background:#ef4444; color:#fff; }
   @media print {
     .no-print { display: none !important; }
     .print-only { display: inline !important; }
@@ -275,133 +271,21 @@ function printPo(po){
 </script>
 <script type="text/jsx-source" id="jsx-source">
 const { useState, useEffect, useCallback, useRef } = React;
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxPMhepCNDD0--vpth-gWJyeI8DWUjdbMmrXLM3T4LLCQbiLZaAgH5FcnlrqyfVnRc/exec';
-// GET turned out to be the reliable transport, not POST: Apps Script's web
-// app responses come back through an internal redirect, and while GET
-// survives that redirect cleanly, a POST gets a real 200 response that the
-// browser then throws away as a CORS failure (Google doesn't attach the
-// right header on that redirected response for POST). So every call here
-// uses GET — the thing that actually needed fixing was the URL-length limit
-// that large payloads were hitting, which is solved below by chunking
-// instead of switching transport.
-const gasGetCall = (fn, ...args) => {
-  const params = new URLSearchParams({ fn, args: JSON.stringify(args) });
-  return fetch(`${GAS_URL}?${params}`, { redirect: 'follow' }).then(r => r.json());
-};
-const GAS = {
-  call: (fn, ...args) => gasGetCall(fn, ...args).catch(e => { console.warn('GAS call failed:', fn, e); return null; })
-};
-// Large values (a big invoice history, a product catalog, anything with an
-// embedded signature image) don't fit in a single GET request's URL. Split
-// the JSON string into small pieces, upload each piece in parallel, then
-// tell the backend how many pieces to expect so it can stitch them back
-// together. Kept conservative (1500 raw chars) since base64 image data
-// expands when URL-encoded (+, /, = each become 3 characters).
-const CHUNK_SIZE = 1500;
-const splitIntoChunks = (str, size) => {
-  const out = [];
-  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
-  return out;
-};
-const saveKeyChunked = (key, value) => {
-  const str = JSON.stringify(value);
-  if (str.length <= CHUNK_SIZE) {
-    return gasGetCall('saveKey', key, str);
-  }
-  const chunks = splitIntoChunks(str, CHUNK_SIZE);
-  return Promise.all(chunks.map((c, i) => gasGetCall('saveKeyChunk', key, i, c)))
-    .then(() => gasGetCall('finalizeChunkedKey', key, chunks.length));
-};
-const _writeQueue = {};
-const _writeTimers = {};
-// ── Pending-write tracking + retry ───────────────────────────────────────
-// If a save to the cloud (Google Sheet) never completes — the tab/browser is
-// closed before the debounce fires, the network drops, Apps Script is slow —
-// the change would previously be silently lost from the cloud copy forever.
-// We mark keys as "pending" in localStorage, retry with backoff, and flush
-// immediately when the page is about to close/hide so same-day work has the
-// best chance of reaching the cloud before the tab disappears.
-const PENDING_WRITES_KEY = '__pos_pending_writes__';
-const markPending = (key) => {
-  try {
-    const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
-    if (!pending.includes(key)) { pending.push(key); localStorage.setItem(PENDING_WRITES_KEY, JSON.stringify(pending)); }
-  } catch (e) {}
-};
-const clearPending = (key) => {
-  try {
-    const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
-    const next = pending.filter(k => k !== key);
-    localStorage.setItem(PENDING_WRITES_KEY, JSON.stringify(next));
-  } catch (e) {}
-};
-const saveKeyWithRetry = (key, value, attempt) => {
-  attempt = attempt || 0;
-  saveKeyChunked(key, value).then(() => {
-    clearPending(key);
-  }).catch(e => {
-    console.warn('Cloud save failed (attempt ' + (attempt + 1) + '):', key, e);
-    if (attempt < 4) {
-      setTimeout(() => saveKeyWithRetry(key, value, attempt + 1), 1500 * (attempt + 1));
-    } else {
-      console.warn('Giving up on cloud save for now — will retry next time the app loads:', key);
-      // Left marked pending on purpose: the next app load's flushPendingLocalWrites() will retry it.
-    }
-  });
-};
-const debouncedSave = (key, value) => {
-  _writeQueue[key] = value;
-  markPending(key);
-  if (_writeTimers[key]) clearTimeout(_writeTimers[key]);
-  _writeTimers[key] = setTimeout(() => {
-    saveKeyWithRetry(key, _writeQueue[key]);
-    LS.set(key, _writeQueue[key]);
-    delete _writeQueue[key];
-    delete _writeTimers[key];
-  }, 800);
-};
-// Force any debounced-but-not-yet-sent saves out immediately when the tab is
-// about to be hidden/closed, instead of waiting out the 800ms debounce.
-const flushPendingLocalWrites = () => {
-  Object.keys(_writeTimers).forEach(key => {
-    clearTimeout(_writeTimers[key]);
-    delete _writeTimers[key];
-    if (_writeQueue.hasOwnProperty(key)) {
-      saveKeyWithRetry(key, _writeQueue[key]);
-      delete _writeQueue[key];
-    }
-  });
-};
-if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', flushPendingLocalWrites);
-  window.addEventListener('beforeunload', flushPendingLocalWrites);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushPendingLocalWrites();
-  });
-  // On a fresh load, re-attempt any writes that never made it to the cloud
-  // last session (e.g. the tab was closed before the debounce/save finished).
-  setTimeout(() => {
-    try {
-      const pending = JSON.parse(localStorage.getItem(PENDING_WRITES_KEY) || '[]');
-      pending.forEach(key => {
-        const val = LS.get(key, null);
-        if (val !== null) saveKeyWithRetry(key, val);
-      });
-    } catch (e) {}
-  }, 1500);
-}
+// The app is fully local: everything lives in this browser's localStorage.
+// No server, no network calls, no CORS to fight — your data persists here
+// for as long as this browser's storage isn't cleared, and the "Export
+// Backup" / "Download CSV" buttons give you a real file on disk whenever
+// you want a safety copy.
 const LS = {
   get: (k, fb) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : fb; } catch { return fb; } },
   set: (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }};
-const isGAS = () => true;
-// ── Non-destructive cloud merge ──────────────────────────────────────────
-// Counters and history-like lists must never go BACKWARDS just because the
-// cloud copy (Google Sheet) is behind — e.g. because a previous save never
-// made it up (tab closed early, network drop, Apps Script hiccup). Instead
-// of blindly trusting whichever value the cloud returns, we fold it into
-// whatever this device already has: counters take the higher of the two,
-// and lists are unioned by their natural ID so an invoice/quote already
-// created on this device can never be silently erased by a stale cloud read.
+// ── Safe re-apply of the on-load snapshot ────────────────────────────────
+// On startup, App() reads everything back out of localStorage once and
+// passes it down as "cloudData" (old naming from when this synced to a
+// server — there's no server now, it's just this browser's own storage).
+// Counters take the higher of the two reads and lists are unioned by their
+// natural ID purely as a safety net, so nothing already on screen can ever
+// get clobbered by that second read of the same data.
 const COUNTER_KEYS = new Set(['pos_inv_counter','pos_q_counter','pos_dr_counter','pos_jo_counter','pos_po_counter']);
 const LIST_ID_GETTERS = {
   pos_history:      x => x && x.invoiceNo,
@@ -495,11 +379,6 @@ function useCloudState(key, def, loaded, cloudData) {
     setValRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       LS.set(key, next);
-      if (isGAS()) {
-        debouncedSave(key, next);
-      } else {
-        LS.set(key, next);
-      }
       return next;
     });
   }, [key]);
@@ -673,55 +552,18 @@ function SignaturePad({ label, color="#2d2080", onSave, savedSig, onClear, disab
 function App() {
   const [appLoaded, setAppLoaded] = useState(true);
   const [cloudData,  setCloudData]  = useState({});
-  const [syncStatus, setSyncStatus] = useState('');
   useEffect(() => {
-    if (isGAS()) {
-      setSyncStatus('saving');
-      GAS.call('loadCriticalData').then(data => {
-        const parsed = {};
-        if (data) {
-          Object.keys(data).forEach(k => {
-            try { parsed[k] = typeof data[k] === 'string' ? JSON.parse(data[k]) : data[k]; }
-            catch { parsed[k] = data[k]; }
-          });
-        }
-        setCloudData(parsed || {});
-        setAppLoaded(true);
-        setSyncStatus('saved');
-        setTimeout(() => setSyncStatus(''), 2000);
-        GAS.call('loadLazyData').then(lazyData => {
-          if (lazyData) {
-            const lazyParsed = {};
-            Object.keys(lazyData).forEach(k => {
-              try { lazyParsed[k] = typeof lazyData[k] === 'string' ? JSON.parse(lazyData[k]) : lazyData[k]; }
-              catch { lazyParsed[k] = lazyData[k]; }
-            });
-            setCloudData(prev => ({...prev, ...lazyParsed}));
-          }
-        }).catch(e => console.warn('Lazy load error:', e));
-        GAS.call('getProductsFromSheet').then(res => {
-          if (res && res.ok && res.products && res.products.length > 0) {
-            setProducts(sanitizeProducts(res.products));
-          }
-        });
-      }).catch(e => {
-        console.error('Load error:', e);
-        setAppLoaded(true);
-        setSyncStatus('error');
-      });
-    } else {
-      const keys = ['pos_products','pos_clients','pos_history','pos_sales_items','pos_payments','pos_inv_counter',
-                    'pos_company','pos_cart','pos_sel_client','pos_discount',
-                    'pos_notes','pos_vat_override','pos_ewt_pct','pos_current_inv',
-                    'pos_q_counter','pos_q_history',
-                    'pos_dr_counter','pos_dr_history',
-                    'pos_jo_counter','pos_jo_history',
-                    'pos_po_counter','pos_po_history'];
-      const data = {};
-      keys.forEach(k => { data[k] = LS.get(k, null); });
-      setCloudData(data);
-      setAppLoaded(true);
-    }
+    const keys = ['pos_products','pos_clients','pos_history','pos_sales_items','pos_payments','pos_inv_counter',
+                  'pos_company','pos_cart','pos_sel_client','pos_discount',
+                  'pos_notes','pos_vat_override','pos_ewt_pct','pos_current_inv',
+                  'pos_q_counter','pos_q_history',
+                  'pos_dr_counter','pos_dr_history',
+                  'pos_jo_counter','pos_jo_history',
+                  'pos_po_counter','pos_po_history'];
+    const data = {};
+    keys.forEach(k => { data[k] = LS.get(k, null); });
+    setCloudData(data);
+    setAppLoaded(true);
   }, []);
   const [products,    setProducts]    = useCloudState("pos_products",    DEFAULT_PRODUCTS, appLoaded, cloudData);
   const [clients,     setClients]     = useCloudState("pos_clients",     DEFAULT_CLIENTS,  appLoaded, cloudData);
@@ -832,7 +674,6 @@ function App() {
   const [invRecvSign, setInvRecvSign] = useState(null); // base64 dataURL
   const [invEmailSent, setInvEmailSent] = useState(false);
   const [invEmailSending, setInvEmailSending] = useState(false);
-  const [exportMsg,   setExportMsg]   = useState('');
   const [prodCatFilter, setProdCatFilter] = useState("All");
   const [rTab,           setRTab]           = useState("overview");
   const [rDateFrom,      setRDateFrom]      = useState(() => new Date().toISOString().slice(0,10));
@@ -1059,20 +900,6 @@ function App() {
   const delCli = id => { if(window.confirm("Delete this client?")){ setClients(cs=>cs.filter(x=>x.id!==id)); if(selClient?.id===id) setSelClient(null); showBadge(); } };
   const startEditCli = c => { setCForm({name:c.name,contact:c.contact,phone:c.phone,address:c.address,tin:c.tin||""}); setEditCli(c); setShowAddCli(true); };
   const handleExportSheet = () => {
-    if (isGAS()) {
-      setExportMsg('Exporting...');
-      GAS.call('exportToSheet').then(res => {
-        if (res && res.ok) {
-          setExportMsg('');
-          if (window.confirm('✅ Exported! Open your Google Sheet now?')) {
-            window.open(res.url, '_blank');
-          }
-        } else {
-          setExportMsg('');
-          alert('Export failed: ' + (res && res.msg ? res.msg : 'Unknown error'));
-        }
-      }).catch(e => { setExportMsg(''); alert('Export error: ' + e); });
-    } else {
       if (history.length === 0) { alert('No invoices to export yet.'); return; }
       const salesRows = [['Invoice No','Date','Due Date','Client','Subtotal','VAT','Discount','EWT','Other Charges','Total','Status','Notes']];
       history.forEach(inv => {
@@ -1106,7 +933,6 @@ function App() {
         });
         setTimeout(()=>dl(toCSV(payRows), 'Payments_' + new Date().toISOString().slice(0,10) + '.csv'), 800);
       }
-    }
   };
   // Poll for client signatures saved by the signing page
   useEffect(() => {
@@ -1188,7 +1014,6 @@ function App() {
     const tdAlt = (extra={}) => ({padding:"8px 10px",border:"1px solid #ccc",background:"#e8eef7",verticalAlign:"top",...extra});
     return (
       <div style={{background:"var(--bg)",minHeight:"100vh",paddingTop:16}}>
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div id="receipt-area" style={{fontFamily:"'Roboto','Arial',sans-serif",width:"794px",maxWidth:"794px",margin:"0 auto",padding:"16px 22px",background:"#fff",color:"#111",boxSizing:"border-box"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,paddingBottom:10,borderBottom:"3px solid #2d2080"}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -1627,7 +1452,6 @@ function App() {
     return (
       <div style={{minHeight:"100vh",background:"#f0f4f8",display:"flex",flexDirection:"column"}}>
         {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 24px",display:"flex",alignItems:"center",gap:14,flexShrink:0,boxShadow:"0 2px 16px rgba(0,0,0,0.4)",borderBottom:"2px solid var(--brand-cyan)"}}>
           <button onClick={()=>{setEditInv(null);setShowPicker(false);navigateTo("history");}} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.25)",color:"#fff",borderRadius:7,padding:"7px 16px",fontWeight:700,cursor:"pointer",fontSize:13}}>✕ Cancel</button>
           <div>
@@ -2378,13 +2202,12 @@ function App() {
     return (
     <div style={{minHeight:"100vh",background:"var(--bg)"}}>
       {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
-      {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
       <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid var(--brand-cyan)",flexWrap:"wrap"}}>
         <button onClick={()=>navigateTo("pos")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← POS</button>
         <div style={{fontWeight:800,fontSize:16,color:"#fff"}}>📋 Invoice History</div>
         <button onClick={()=>navigateTo("ledger")} className="nav-btn" style={{background:"rgba(0,196,212,0.15)",border:"1px solid var(--brand-cyan)",color:"var(--bc)",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:12}}>📒 Client Ledger</button>
         <div style={{marginLeft:"auto",fontSize:12,color:"#64748b"}}>{histFiltered.length}/{history.length} shown</div>
-        <button onClick={handleExportSheet} style={{background:"#22c55e",border:"none",color:"#fff",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>{exportMsg||(isGAS()?"📊 Export to Sheet":"📥 Download CSV")}</button>
+        <button onClick={handleExportSheet} style={{background:"#22c55e",border:"none",color:"#fff",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>📥 Download CSV</button>
         {history.length>0&&<button onClick={()=>{if(window.confirm("Clear all history?"))setHistory([]);}} style={{background:"#ef444420",border:"1px solid #ef4444",color:"#ef4444",borderRadius:7,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>🗑 Clear All</button>}
       </div>
       <div style={{background:"var(--bs)",borderBottom:"1px solid var(--brand-border)",padding:"10px 20px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -2702,7 +2525,6 @@ function App() {
     return (
       <div style={{minHeight:"100vh",background:"var(--bg)"}}>
         {badge&&<div className="save-badge">✅ Saved</div>}
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div style={{background:"linear-gradient(135deg,var(--brand-purple-dark),var(--brand-purple))",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid var(--brand-cyan)",flexWrap:"wrap"}}>
           <button onClick={()=>navigateTo("history")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← History</button>
           <button onClick={()=>navigateTo("pos")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>🧾 POS</button>
@@ -2919,7 +2741,6 @@ function App() {
     return (
       <div style={{minHeight:"100vh",background:"var(--bg)"}}>
         {badge&&<div className="save-badge">✅ Saved</div>}
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div style={{background:"linear-gradient(135deg,#1a1560,#2d2080)",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid #f59e0b",flexWrap:"wrap"}}>
           <button onClick={()=>navigateTo("quotation")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← Quotation</button>
           <div style={{fontWeight:800,fontSize:16,color:"#fcd34d"}}>📝 Quotation History</div>
@@ -3608,7 +3429,6 @@ function App() {
     const tdAlt=(extra={})=>({padding:"6px 8px",border:"1px solid #ccc",background:"#f0fdf4",verticalAlign:"top",...extra});
     return (
       <div style={{background:"var(--bg)",minHeight:"100vh",paddingTop:16}}>
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div id="dr-area" style={{fontFamily:"'Roboto','Arial',sans-serif",width:"100%",margin:"0 auto",padding:"20px 28px",background:"#fff",color:"#111"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,paddingBottom:14,borderBottom:"3px solid #166534"}}>
             <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -3707,7 +3527,6 @@ function App() {
     return (
       <div style={{minHeight:"100vh",background:"var(--bg)"}}>
         {badge&&<div className="save-badge">✅ Saved</div>}
-        {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
         <div style={{background:"linear-gradient(135deg,#14532d,#166534)",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid #22c55e",flexWrap:"wrap"}}>
           <button onClick={()=>navigateTo("delivery_receipt")} className="nav-btn" style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",borderRadius:7,padding:"7px 14px",fontWeight:700,fontSize:13}}>← Delivery</button>
           <div style={{fontWeight:800,fontSize:16,color:"#86efac"}}>📦 Delivery Receipt History</div>
@@ -5337,7 +5156,6 @@ function App() {
   return (
     <div id="pos-area" style={{height:openTabs.length>1?"calc(100vh - 34px)":"100vh",background:"var(--bg)",display:"flex",flexDirection:"column",overflow:"hidden",marginTop:openTabs.length>1?34:0}}>
       {badge&&<div className="save-badge">✅ Saved to Google Drive</div>}
-      {syncStatus&&<div className={`sync-indicator sync-${syncStatus}`}>{syncStatus==='saving'?'☁️ Saving...':syncStatus==='saved'?'✅ Saved to Drive':'❌ Sync Error'}</div>}
       {openTabs.length>1&&(
         <div style={{position:"fixed",top:0,left:0,right:0,zIndex:500,display:"flex",alignItems:"stretch",background:"#0a0820",borderBottom:"2px solid var(--brand-border)",height:34,overflowX:"auto",overflowY:"hidden"}}>
           {openTabs.map(tab=>(

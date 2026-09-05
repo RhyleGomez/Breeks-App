@@ -33,13 +33,17 @@ header{background:var(--navy);color:#fff;padding:14px 16px 12px;position:sticky;
 .search-row{display:flex;gap:8px;margin-top:10px}
 .search-row input{flex:1;border:none;border-radius:9px;padding:9px 12px;font-size:.9rem;font-family:inherit;outline:none}
 
-/* VIEW TOGGLE + CHIPS */
+/* VIEW TOGGLE */
 .views{display:flex;gap:6px;padding:12px 16px 0}
 .vbtn{flex:1;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:9px 0;font-size:.8rem;font-weight:700;font-family:'Space Grotesk';color:var(--muted);cursor:pointer}
 .vbtn.on{background:var(--navy);border-color:var(--navy);color:#fff}
-.chips{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto}
-.chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:.75rem;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
-.chip.on{background:var(--cyan);border-color:var(--cyan);color:#fff}
+
+/* FILTER BAR */
+.filterbar{display:none;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px 0}
+.filterbar select{flex:1;min-width:140px;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;font-size:.78rem;font-weight:600;font-family:inherit;color:var(--ink)}
+.filterbar select.on{border-color:var(--cyan);background:var(--cyan-bg);color:var(--cyan-ink)}
+.fclear{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:8px 12px;font-size:.75rem;font-weight:700;font-family:inherit;color:var(--danger);cursor:pointer;flex:0 0 auto}
+.fcount{width:100%;font-size:.7rem;font-weight:600;color:var(--muted)}
 
 /* TABLE */
 .twrap{padding:12px 16px 20px;overflow-x:auto}
@@ -233,7 +237,7 @@ input[type=file]{display:none}
   <button class="vbtn" id="vLib" onclick="setView('lib')">Library</button>
   <button class="vbtn" id="vSetup" onclick="setView('setup')">Setup</button>
 </div>
-<div class="chips" id="chips"></div>
+<div class="filterbar" id="filterbar"></div>
 
 <div class="twrap" id="twrap"></div>
 <div class="setwrap" id="setwrap" style="display:none"></div>
@@ -447,7 +451,7 @@ let products=lsGet(KEY,[]), images=lsGet(IMGKEY,[]), sets=lsGet(SETKEY,[]),
     categories=lsGet(CATKEY,[]), supplierMaster=lsGet(SUPKEY,[]),
     costDefaults=Object.assign({},DEFAULT_COST_PCT,lsGet(COSTKEY,{}));
 let editId=null, editSetId=null, editSupId=null, photoImgId='', setImgId='', photoTarget='product',
-    activeChip='All', view='products';
+    activeChip='All', activeSup='All', view='products';
 const DEFAULT_CATEGORIES=['Drinkware','Stationery','Bags','Apparel','Premium Gifts',
   'Tech Accessories','Eco-Friendly','Corporate Giveaways','Packaging & Boxes','Signage & Displays','Other'];
 
@@ -639,27 +643,62 @@ const STATUS_CLASS={Active:'pill-active',Draft:'pill-draft',Discontinued:'pill-d
 function render(){
   const q=(document.getElementById('search').value||'').toLowerCase();
   const twrap=document.getElementById('twrap'),setwrap=document.getElementById('setwrap'),
-        libwrap=document.getElementById('libwrap'),chips=document.getElementById('chips'),
-        setupwrap=document.getElementById('setupwrap'),
+        libwrap=document.getElementById('libwrap'),
+        setupwrap=document.getElementById('setupwrap'),filterbar=document.getElementById('filterbar'),
         empty=document.getElementById('empty'),fab=document.getElementById('fab');
   twrap.style.display=view==='products'?'block':'none';
   setwrap.style.display=view==='sets'?'grid':'none';
   libwrap.style.display=view==='lib'?'grid':'none';
   setupwrap.style.display=view==='setup'?'block':'none';
-  chips.style.display=view==='products'?'flex':'none';
+  filterbar.style.display=view==='products'?'flex':'none';
   fab.style.display=(view==='products'||view==='sets'||view==='setup')?'block':'none';
   fab.textContent=view==='sets'?'+ Add Set':(view==='setup'?'+ Add Supplier':'+ Add Product');
   empty.style.display='none';
 
   if(view==='products'){
-    const cats=['All',...new Set(products.map(p=>p.cat).filter(Boolean))];
-    chips.innerHTML=cats.map(c=>'<div class="chip '+(c===activeChip?'on':'')+'" onclick="setChip(\''+c.replace(/'/g,"\\'")+'\')">'+esc(c)+'</div>').join('');
+    /* both dropdowns follow the order of the Setup lists, then any stray values
+       that exist on products but were removed from Setup */
+    const catCount={}, supCount={};
+    products.forEach(p=>{
+      if(p.cat)catCount[p.cat]=(catCount[p.cat]||0)+1;
+      [...new Set((p.suppliers||[]).map(s=>s.name).filter(Boolean))]
+        .forEach(n=>supCount[n]=(supCount[n]||0)+1);
+    });
+    const usedCats=Object.keys(catCount);
+    const catList=['All',...categories.filter(c=>usedCats.includes(c)),
+                   ...usedCats.filter(c=>!categories.includes(c))];
+    const usedSups=Object.keys(supCount);
+    const supList=['All',...supplierMaster.map(s=>s.name).filter(n=>usedSups.includes(n)),
+                   ...usedSups.filter(n=>!supplierMaster.some(s=>s.name===n))];
+    /* a category or supplier can disappear (deleted, renamed, product edited)
+       while it is the active filter — fall back to All instead of showing nothing */
+    if(!catList.includes(activeChip))activeChip='All';
+    if(!supList.includes(activeSup))activeSup='All';
+
     const list=products.filter(p=>{
-      const supNames=(p.suppliers||[]).map(s=>s.name).join(' ');
-      const hay=(p.sku+' '+p.name+' '+supNames+' '+p.cat+' '+p.desc+' '+(p.notes||'')).toLowerCase();
-      return hay.includes(q)&&(activeChip==='All'||p.cat===activeChip);
+      const sups=(p.suppliers||[]).map(s=>s.name);
+      const hay=(p.sku+' '+p.name+' '+sups.join(' ')+' '+p.cat+' '+p.desc+' '+(p.notes||'')).toLowerCase();
+      return hay.includes(q)
+        &&(activeChip==='All'||p.cat===activeChip)
+        /* matches a product if ANY of its suppliers is the selected one,
+           not just the currently-selected primary supplier */
+        &&(activeSup==='All'||sups.includes(activeSup));
     }).sort(bySku);
+
+    const opts=(items,active,counts,allLabel)=>items.map(n=>
+      '<option value="'+esc(n)+'"'+(n===active?' selected':'')+'>'+
+      (n==='All'?allLabel:esc(n)+' · '+(counts[n]||0))+'</option>').join('');
+    const filtered=activeChip!=='All'||activeSup!=='All'||q;
+    filterbar.innerHTML=
+      '<select class="'+(activeChip!=='All'?'on':'')+'" onchange="setCatFilter(this.value)">'+
+        opts(catList,activeChip,catCount,'All categories')+'</select>'+
+      '<select class="'+(activeSup!=='All'?'on':'')+'" onchange="setSupFilter(this.value)">'+
+        opts(supList,activeSup,supCount,'All suppliers')+'</select>'+
+      (filtered?'<button class="fclear" onclick="clearFilters()">Clear filters</button>':'')+
+      (products.length?'<span class="fcount">Showing '+list.length+' of '+products.length+' products</span>':'');
+
     if(!products.length){showEmpty('No products yet','Tap “+ Add Product” to start your database.');twrap.innerHTML='';}
+    else if(!list.length){showEmpty('No products match','Try a different category or supplier, or clear the filters to see everything.');twrap.innerHTML='';}
     else twrap.innerHTML='<table><thead><tr>'+
       '<th>Image</th><th>SKU</th><th>Category</th><th>Item</th><th>Supplier</th><th>Supplier SKU</th>'+
       '<th>Unit Cost</th><th>MOQ</th><th>Lead (d)</th><th>Customizable</th><th>Status</th>'+
@@ -726,7 +765,12 @@ function render(){
   }
 
   if(view==='setup'){
-    const supRows=supplierMaster.map(s=>{
+    /* the header search now narrows both Setup lists too */
+    const supMatches=supplierMaster.filter(s=>
+      [s.name,s.contact,s.phone,s.email,s.address,s.terms,s.notes]
+        .filter(Boolean).join(' ').toLowerCase().includes(q));
+    const catMatches=categories.filter(c=>c.toLowerCase().includes(q));
+    const supRows=supMatches.map(s=>{
       const used=products.filter(p=>(p.suppliers||[]).some(x=>x.name===s.name)).length;
       const bits=[s.contact,s.phone,s.email,s.address,s.terms].filter(Boolean);
       return '<div class="supcard-row">'+
@@ -736,7 +780,7 @@ function render(){
         '<div class="acts"><button onclick="openSupplierModal(\''+s.id+'\')">Edit</button><button class="del" onclick="delSupplier(\''+s.id+'\')">✕</button></div>'+
       '</div>';
     }).join('');
-    const catChips=categories.map(c=>{
+    const catChips=catMatches.map(c=>{
       const used=products.filter(p=>p.cat===c).length;
       return '<span class="catchip">'+esc(c)+(used?' · '+used:'')+' <button onclick="delCategory(\''+c.replace(/'/g,"\\'")+'\')" title="Remove">✕</button></span>';
     }).join('');
@@ -748,13 +792,17 @@ function render(){
     setupwrap.innerHTML=
       '<div class="setup-section">'+
         '<h3>Suppliers</h3>'+
-        '<div class="shint">Every supplier you work with. Add one here — it then shows up in the Supplier dropdown on every product.</div>'+
-        (supplierMaster.length?'<div class="supcard-list">'+supRows+'</div>':'<div class="shint">No suppliers yet — tap “+ Add Supplier” below.</div>')+
+        '<div class="shint">Every supplier you work with. Add one here — it then shows up in the Supplier dropdown on every product.'+
+          (q&&supplierMaster.length?' Showing '+supMatches.length+' of '+supplierMaster.length+' — search is filtering this list.':'')+'</div>'+
+        (!supplierMaster.length?'<div class="shint">No suppliers yet — tap “+ Add Supplier” below.</div>'
+          :supMatches.length?'<div class="supcard-list">'+supRows+'</div>'
+          :'<div class="shint">No supplier matches “'+esc(q)+'”.</div>')+
       '</div>'+
       '<div class="setup-section">'+
         '<h3>Categories</h3>'+
         '<div class="shint">Powers the Category dropdown on every product.</div>'+
-        '<div class="catchips">'+catChips+'</div>'+
+        (catMatches.length?'<div class="catchips">'+catChips+'</div>'
+          :'<div class="shint">'+(q?'No category matches “'+esc(q)+'”.':'No categories yet — add one below.')+'</div>')+
         '<div class="addrow-inline"><input id="newCatInput" placeholder="New category name" onkeydown="if(event.key===\'Enter\')addCategory()"><button onclick="addCategory()">Add</button></div>'+
       '</div>'+
       '<div class="setup-section">'+
@@ -775,7 +823,13 @@ function showEmpty(h,p){
   const e=document.getElementById('empty');
   e.style.display='block';e.querySelector('h2').textContent=h;e.querySelector('p').textContent=p;
 }
-function setChip(c){activeChip=c;render();}
+function setCatFilter(c){activeChip=c;render();}
+function setSupFilter(n){activeSup=n;render();}
+function clearFilters(){
+  activeChip='All';activeSup='All';
+  document.getElementById('search').value='';
+  render();
+}
 
 /* ---------- LIGHTBOX ---------- */
 function lightbox(imgId){

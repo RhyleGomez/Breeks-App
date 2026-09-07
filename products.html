@@ -117,6 +117,10 @@ td img{width:40px;height:40px;object-fit:cover;border-radius:8px;display:block;c
 .costrow-label{font-weight:700;color:var(--ink);font-size:.85rem;display:flex;flex-direction:column;gap:2px}
 .costrow-range{font-size:.68rem;font-weight:600;color:var(--muted)}
 .costrow-input{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.moderow{background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.modebtns{display:flex;gap:6px;flex:0 0 auto}
+.modebtns button{border:1.5px solid var(--line);background:#fff;color:var(--muted);border-radius:9px;padding:7px 11px;font-size:.72rem;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap}
+.modebtns button.on{border-color:var(--cyan);background:#F2FAFE;color:#0779B5}
 .costrow-input input{width:70px;border:1.5px solid var(--line);border-radius:9px;padding:7px 8px;font-size:.9rem;font-family:inherit;text-align:right}
 .costrow-input span{font-size:.85rem;color:var(--muted);font-weight:600}
 
@@ -308,13 +312,15 @@ input[type=file]{display:none}
         <div class="frow"><label>Labor / handling %</label>
           <div class="pct-amt-row"><input id="fLaborPct" type="number" inputmode="decimal" step="0.1" placeholder="8" oninput="calc()"><span class="pct-amt" id="fLaborAmt">₱0.00</span></div>
         </div>
-        <div class="frow"><label>Wastage allowance %</label><input id="fWastage" type="number" inputmode="decimal" placeholder="8" oninput="calc()"></div>
+        <div class="frow"><label>Wastage allowance %</label>
+          <div class="pct-amt-row"><input id="fWastage" type="number" inputmode="decimal" step="0.1" placeholder="8" oninput="calc()"><span class="pct-amt" id="fWastageAmt">₱0.00</span></div>
+        </div>
       </div>
     </div>
 
     <div class="f3">
-      <div class="frow"><label>Target margin %</label><input id="fMargin" type="number" inputmode="decimal" value="40" oninput="calc()"></div>
-      <div class="frow"><label>Tax %</label><input id="fTax" type="number" inputmode="decimal" value="12" oninput="calc()"></div>
+      <div class="frow"><label id="fMarginLabel">Target markup %</label><input id="fMargin" type="number" inputmode="decimal" step="0.1" placeholder="60" oninput="calc()"></div>
+      <div class="frow"><label>Tax %</label><input id="fTax" type="number" inputmode="decimal" step="0.1" placeholder="12" oninput="calc()"></div>
       <div class="frow"><label>Override ₱</label><input id="fOverride" type="number" inputmode="decimal" placeholder="auto" oninput="calc()"></div>
     </div>
     <div class="calc">
@@ -433,13 +439,14 @@ input[type=file]{display:none}
 const KEY='breeks_products_v2', IMGKEY='breeks_images_v1', SETKEY='breeks_sets_v1',
       CATKEY='breeks_categories_v1', SUPKEY='breeks_suppliers_v1', COSTKEY='breeks_costdefaults_v1';
 const lsGet=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
-const DEFAULT_COST_PCT={customizationPct:15,packagingPct:10,laborPct:8,wastagePct:8,marginPct:60};
+const DEFAULT_COST_PCT={customizationPct:15,packagingPct:10,laborPct:8,wastagePct:8,marginPct:60,taxPct:12,marginMode:'markup'};
 const COST_PCT_META=[
   {key:'customizationPct',label:'Customization Cost',range:'8–15%',note:'of unit cost'},
   {key:'packagingPct',label:'Packaging Cost',range:'5–10%',note:'of unit cost'},
   {key:'laborPct',label:'Labor / Handling',range:'5–8%',note:'of unit cost'},
-  {key:'wastagePct',label:'Wastage Allowance',range:'2–5%',note:'of unit cost'},
-  {key:'marginPct',label:'Target Margin',range:'',note:'markup on True Cost'},
+  {key:'wastagePct',label:'Wastage Allowance',range:'2–5%',note:'of subtotal (unit + custom + pack + labor)'},
+  {key:'marginPct',label:'Target Markup / Margin',range:'',note:''},
+  {key:'taxPct',label:'Tax / VAT',range:'',note:'added on top of the marked-up price'},
 ];
 /* one-time key migration from v1 storage if v2 not present yet */
 (function bootstrapStorage(){
@@ -510,6 +517,7 @@ function bySku(a,b){ return skuSortKey(a.sku)-skuSortKey(b.sku) || String(a.sku|
       changed=true;
     }
     if(p.wastagePct===undefined||p.wastagePct===''){p.wastagePct=DEFAULT_COST_PCT.wastagePct;changed=true;}
+    if(p.tax===undefined||p.tax===''||p.tax===null){p.tax=costDefaults.taxPct;changed=true;}
   });
   /* assign chronological SKUs to anything missing one, oldest-created first
      (array is newest-first because new products are unshifted) */
@@ -570,32 +578,55 @@ function costAmounts(p){
   const cc=unit*(Number(p.customPct)||0)/100;
   const pc=unit*(Number(p.packagingPct)||0)/100;
   const lc=unit*(Number(p.laborPct)||0)/100;
-  return{unit,cc,pc,lc};
+  const sub=unit+cc+pc+lc;
+  const wc=sub*(Number(p.wastagePct)||0)/100;
+  return{unit,cc,pc,lc,sub,wc};
 }
 function trueCost(p){
   const a=costAmounts(p);
-  const sub=a.unit+a.cc+a.pc+a.lc, w=Number(p.wastagePct)||0;
-  return sub*(1+w/100);
+  return a.sub+a.wc;
+}
+const hasOverride=p=>p.override!==''&&p.override!=null&&!isNaN(p.override)&&Number(p.override)!==0;
+/* MARKUP mode: price = cost x (1 + m%).  MARGIN mode: price = cost / (1 - m%),
+   so that profit / revenue really does come out to m% (Profit Margin = Profit/Revenue x 100). */
+const marginMode=()=>costDefaults.marginMode==='margin'?'margin':'markup';
+function priceFactor(m){
+  m=Number(m)||0;
+  if(marginMode()==='margin'){ const d=1-m/100; return d>0?1/d:null; }
+  return 1+m/100;
+}
+/* selling price BEFORE tax - this is Revenue for the margin formula */
+function netPrice(p){
+  const t=Number(p.tax)||0;
+  if(hasOverride(p)) return Number(p.override)/(1+t/100);
+  const f=priceFactor(p.margin);
+  return f==null?trueCost(p):trueCost(p)*f;
 }
 function sellPrice(p){
-  if(p.override!==''&&p.override!=null&&!isNaN(p.override)&&Number(p.override)!==0) return Number(p.override);
-  const tc=trueCost(p), m=Number(p.margin)||0, t=Number(p.tax)||0;
-  return tc*(1+m/100)*(1+t/100);
+  if(hasOverride(p)) return Number(p.override);
+  return netPrice(p)*(1+(Number(p.tax)||0)/100);
 }
-function grossProfit(p){ return sellPrice(p)-trueCost(p); }
+/* tax is collected for the BIR, not earned - it is never profit */
+function taxAmount(p){ return sellPrice(p)-netPrice(p); }
+function grossProfit(p){ return netPrice(p)-trueCost(p); }
+function realMargin(p){ const n=netPrice(p); return n?grossProfit(p)/n*100:0; }
 function setTotals(s){
-  let cost=0,sell=0;
+  let cost=0,sell=0,net=0;
   (s.items||[]).forEach(it=>{
     const q=Number(it.qty)||1;
-    if(it.manual){const pr=(Number(it.price)||0)*q;cost+=pr;sell+=pr;return;}
+    if(it.manual){const pr=(Number(it.price)||0)*q;cost+=pr;sell+=pr;net+=pr;return;}
     const p=products.find(x=>x.id===it.productId);if(!p)return;
-    cost+=trueCost(p)*q; sell+=sellPrice(p)*q;
+    cost+=trueCost(p)*q; sell+=sellPrice(p)*q; net+=netPrice(p)*q;
   });
   let exp=0;(s.expenses||[]).forEach(e=>exp+=Number(e.amount)||0);
-  cost+=exp; sell+=exp;
+  cost+=exp; sell+=exp; net+=exp;
   const ov=(s.override!==''&&s.override!=null&&!isNaN(s.override)&&Number(s.override)!==0);
   const final=ov?Number(s.override):sell;
-  return{cost,autoSell:sell,final,profit:final-cost,ov};
+  /* an override is a tax-inclusive price - scale the net down in the same proportion */
+  const netFinal=ov?(sell?final*(net/sell):final):net;
+  const profit=netFinal-cost;
+  return{cost,autoSell:sell,final,net:netFinal,tax:final-netFinal,profit,
+         margin:netFinal?profit/netFinal*100:0,ov};
 }
 
 /* ---------- LAYER MANAGER ---------- */
@@ -703,7 +734,7 @@ function render(){
       '<th>Image</th><th>SKU</th><th>Category</th><th>Item</th><th>Supplier</th><th>Supplier SKU</th>'+
       '<th>Unit Cost</th><th>MOQ</th><th>Lead (d)</th><th>Customizable</th><th>Status</th>'+
       '<th>Customization</th><th>Packaging</th><th>Labor</th><th>Wastage</th><th>True Cost</th>'+
-      '<th>Target Margin</th><th>Selling Price</th><th>Gross Profit</th><th>Notes</th><th></th>'+
+      '<th>Markup / Margin</th><th>Net Price</th><th>Tax</th><th>Selling Price</th><th>Gross Profit</th><th>Notes</th><th></th>'+
       '</tr></thead><tbody>'+
       list.map(p=>{
         const d=imgOf(p.imgId), sp=supOf(p), extra=(p.suppliers||[]).length-1;
@@ -726,9 +757,11 @@ function render(){
         '<td>'+peso(amts.cc)+' <span class="muted-cell">('+(Number(p.customPct)||0)+'%)</span></td>'+
         '<td>'+peso(amts.pc)+' <span class="muted-cell">('+(Number(p.packagingPct)||0)+'%)</span></td>'+
         '<td>'+peso(amts.lc)+' <span class="muted-cell">('+(Number(p.laborPct)||0)+'%)</span></td>'+
-        '<td>'+(Number(p.wastagePct)||0)+'%</td>'+
+        '<td>'+peso(amts.wc)+' <span class="muted-cell">('+(Number(p.wastagePct)||0)+'%)</span></td>'+
         '<td class="t-truecost">'+peso(tc)+'</td>'+
-        '<td>'+(p.margin||0)+'%</td>'+
+        '<td>'+(p.margin||0)+'% <span class="muted-cell">('+realMargin(p).toFixed(1)+'% real)</span></td>'+
+        '<td>'+peso(netPrice(p))+'</td>'+
+        '<td class="muted-cell">'+peso(taxAmount(p))+'</td>'+
         '<td class="t-price">'+peso(sell)+'</td>'+
         '<td class="t-profit">'+peso(gp)+'</td>'+
         '<td class="wrap" style="max-width:170px;white-space:normal">'+esc(p.notes)+'</td>'+
@@ -784,11 +817,28 @@ function render(){
       const used=products.filter(p=>p.cat===c).length;
       return '<span class="catchip">'+esc(c)+(used?' · '+used:'')+' <button onclick="delCategory(\''+c.replace(/'/g,"\\'")+'\')" title="Remove">✕</button></span>';
     }).join('');
-    const costRows=COST_PCT_META.map(m=>
-      '<div class="costrow"><div class="costrow-label">'+esc(m.label)+
-        '<span class="costrow-range">'+(m.range?'Typical '+m.range+' — ':'')+esc(m.note)+'</span></div>'+
+    const mm=marginMode();
+    const costRows=COST_PCT_META.map(m=>{
+      const note=m.key==='marginPct'
+        ? (mm==='margin'?'true margin — profit ÷ revenue':'markup — added on top of True Cost')
+        : m.note;
+      return '<div class="costrow"><div class="costrow-label">'+esc(m.label)+
+        '<span class="costrow-range">'+(m.range?'Typical '+m.range+' — ':'')+esc(note)+'</span></div>'+
         '<div class="costrow-input"><input type="number" inputmode="decimal" step="0.1" min="0" value="'+costDefaults[m.key]+'" onchange="updateCostDefault(\''+m.key+'\',this.value)"><span>%</span></div>'+
-      '</div>').join('');
+      '</div>';}).join('');
+    const modeRow=
+      '<div class="moderow">'+
+        '<div class="costrow-label">How that % is applied'+
+          '<span class="costrow-range">'+
+            (mm==='margin'
+              ? 'Price = True Cost ÷ (1 − '+costDefaults.marginPct+'%) — you actually earn '+costDefaults.marginPct+'%'
+              : 'Price = True Cost × (1 + '+costDefaults.marginPct+'%) — real margin works out lower')+
+          '</span></div>'+
+        '<div class="modebtns">'+
+          '<button class="'+(mm==='markup'?'on':'')+'" onclick="setMarginMode(\'markup\')">Markup</button>'+
+          '<button class="'+(mm==='margin'?'on':'')+'" onclick="setMarginMode(\'margin\')">True margin</button>'+
+        '</div>'+
+      '</div>';
     setupwrap.innerHTML=
       '<div class="setup-section">'+
         '<h3>Suppliers</h3>'+
@@ -808,13 +858,24 @@ function render(){
       '<div class="setup-section">'+
         '<h3>Pricing Defaults</h3>'+
         '<div class="shint">Used by the “↺ Use % defaults” button on every product. Fully editable — change a number and it saves right away.</div>'+
-        '<div class="costrows">'+costRows+'</div>'+
+        '<div class="costrows">'+costRows+modeRow+'</div>'+
       '</div>';
   }
+}
+function setMarginMode(mode){
+  if(mode==='margin'&&Number(costDefaults.marginPct)>=100){
+    toast('A true margin must be under 100%');return;
+  }
+  costDefaults.marginMode=mode==='margin'?'margin':'markup';
+  persistAll();render();
+  toast(mode==='margin'?'Now solving for true margin':'Now applying markup on cost');
 }
 function updateCostDefault(key,val){
   const n=Number(val);
   if(isNaN(n)||n<0){toast('Enter a valid percentage');render();return;}
+  if(key==='marginPct'&&marginMode()==='margin'&&n>=100){
+    toast('A true margin must be under 100%');render();return;
+  }
   costDefaults[key]=n;
   persistAll();
   toast('Default updated');
@@ -846,7 +907,7 @@ function openModal(id){
     customizable:'No',status:'Active',
     customPct:costDefaults.customizationPct,packagingPct:costDefaults.packagingPct,
     laborPct:costDefaults.laborPct,wastagePct:costDefaults.wastagePct,
-    margin:costDefaults.marginPct,tax:12,override:'',imgId:''
+    margin:costDefaults.marginPct,tax:costDefaults.taxPct,override:'',imgId:''
   };
   document.getElementById('mTitle').textContent=id?'Edit Product':'Add Product';
   fSku.value=p.sku;fCat.innerHTML=catOptionsHtml(p.cat);fCat.value=p.cat;
@@ -856,7 +917,7 @@ function openModal(id){
   fPackagingPct.value=p.packagingPct??costDefaults.packagingPct;
   fLaborPct.value=p.laborPct??costDefaults.laborPct;
   fWastage.value=p.wastagePct??costDefaults.wastagePct;
-  fMargin.value=p.margin;fTax.value=p.tax;fOverride.value=p.override||'';
+  fMargin.value=p.margin;fTax.value=p.tax??costDefaults.taxPct;fOverride.value=p.override||'';
   document.getElementById('defHint').textContent='Each % applies to this item\'s unit cost and recalculates live. Defaults come from Setup — tap Reset to pull them back in.';
   photoImgId=p.imgId||'';photoPrev.src=imgOf(photoImgId)||'';
   document.getElementById('fSuppliers').innerHTML='';
@@ -923,16 +984,29 @@ function calc(){
   document.getElementById('fLaborAmt').textContent=peso(lc);
   const wastage=Number(fWastage.value)||0;
   const sub=c+cc+pc+lc;
-  const tc=sub*(1+wastage/100);
+  const wc=sub*wastage/100;
+  document.getElementById('fWastageAmt').textContent=peso(wc);
+  const tc=sub+wc;
   const m=Number(fMargin.value)||0,t=Number(fTax.value)||0;
+  const mm=marginMode();
+  const pf=priceFactor(m);
   const ov=fOverride.value!==''?Number(fOverride.value):null;
-  const auto=tc*(1+m/100)*(1+t/100);
+  const autoNet=pf==null?tc:tc*pf;
+  const auto=autoNet*(1+t/100);
   const final=ov!=null?ov:auto;
+  const net=ov!=null?ov/(1+t/100):autoNet;
+  const taxAmt=final-net;
+  const profit=net-tc;
+  const realPct=net?profit/net*100:0;
+  document.getElementById('fMarginLabel').textContent=mm==='margin'?'Target margin %':'Target markup %';
   document.getElementById('calcSteps').innerHTML=
     'Unit '+peso(c)+' + Custom '+peso(cc)+' ('+custPct+'%) + Pack '+peso(pc)+' ('+packPct+'%) + Labor '+peso(lc)+' ('+laborPct+'%) = '+peso(sub)+'<br>'+
-    '× Wastage '+wastage+'% → <b>TRUE COST '+peso(tc)+'</b><br>'+
-    (ov!=null?('Manual override (auto: '+peso(auto)+')'):('+Margin '+m+'% · +Tax '+t+'%'))+
-    ' · Gross profit '+peso(final-tc);
+    '+ Wastage '+peso(wc)+' ('+wastage+'%) → <b>TRUE COST '+peso(tc)+'</b><br>'+
+    (pf==null?'<b style="color:var(--danger)">A true margin must be under 100%</b><br>':'')+
+    (ov!=null?('Manual override (auto: '+peso(auto)+')'):
+      ((mm==='margin'?'÷ (1 − '+m+'%)':'+ Markup '+m+'%')+' → net '+peso(autoNet)))+'<br>'+
+    '+ Tax '+peso(taxAmt)+' ('+t+'%) → <b>'+peso(final)+'</b><br>'+
+    'Gross profit '+peso(profit)+' · <b>real margin '+realPct.toFixed(1)+'%</b> (tax excluded)';
   document.getElementById('calcFinal').textContent=peso(final);
 }
 function applyCostDefaults(){
@@ -941,6 +1015,8 @@ function applyCostDefaults(){
   fLaborPct.value=costDefaults.laborPct;
   fWastage.value=costDefaults.wastagePct;
   fMargin.value=costDefaults.marginPct;
+  fTax.value=costDefaults.taxPct;
+  document.getElementById('fMarginLabel').textContent=marginMode()==='margin'?'Target margin %':'Target markup %';
   calc();
   toast('Reset to defaults from Setup');
 }
@@ -1175,9 +1251,10 @@ function delSupplier(id){
 function openSummary(id){
   const p=products.find(x=>x.id===id);if(!p)return;
   const sp=supOf(p), amts=costAmounts(p), unit=amts.unit, cc=amts.cc, pc=amts.pc, lc=amts.lc, w=Number(p.wastagePct)||0;
-  const sub=unit+cc+pc+lc, tc=sub*(1+w/100);
+  const sub=amts.sub, wc=amts.wc, tc=sub+wc;
   const m=Number(p.margin)||0, t=Number(p.tax)||0;
-  const afterMargin=tc*(1+m/100), auto=afterMargin*(1+t/100), price=sellPrice(p), profit=price-tc;
+  const net=netPrice(p), price=sellPrice(p), taxAmt=taxAmount(p),
+        profit=grossProfit(p), realPct=realMargin(p), mm=marginMode();
   const ov=(p.override!==''&&p.override!=null&&!isNaN(p.override)&&Number(p.override)!==0);
   const d=imgOf(p.imgId);
   const stClass=STATUS_CLASS[p.status]||'pill-draft';
@@ -1201,13 +1278,14 @@ function openSummary(id){
     (cc?'<div class="sum-row"><span>Customization ('+(Number(p.customPct)||0)+'%)</span><b>'+peso(cc)+'</b></div>':'')+
     (pc?'<div class="sum-row"><span>Packaging ('+(Number(p.packagingPct)||0)+'%)</span><b>'+peso(pc)+'</b></div>':'')+
     (lc?'<div class="sum-row"><span>Labor / handling ('+(Number(p.laborPct)||0)+'%)</span><b>'+peso(lc)+'</b></div>':'')+
-    (w?'<div class="sum-row"><span>Wastage allowance +'+w+'%</span><b>'+peso(tc-sub)+'</b></div>':'')+
+    (wc?'<div class="sum-row"><span>Wastage allowance ('+w+'%)</span><b>'+peso(wc)+'</b></div>':'')+
     '<div class="sum-row"><span><b style="color:var(--navy)">TRUE COST</b></span><b>'+peso(tc)+'</b></div>'+
-    '<div class="sum-row"><span>Target margin +'+m+'%</span><b>'+peso(afterMargin)+'</b></div>'+
-    '<div class="sum-row"><span>Tax +'+t+'%</span><b>'+peso(auto)+'</b></div>'+
+    '<div class="sum-row"><span>'+(mm==='margin'?'Target margin '+m+'% (÷ '+(100-m)+'%)':'Markup +'+m+'% on cost')+'</span><b>'+peso(net)+'</b></div>'+
+    '<div class="sum-row"><span>Tax +'+t+'%</span><b>'+peso(taxAmt)+'</b></div>'+
     (ov?'<div class="sum-row"><span>Manual override</span><b>'+peso(p.override)+'</b></div>':'')+
     '<div class="sum-row total"><span>Selling price</span><b>'+peso(price)+'</b></div>'+
     '<div class="sum-row profit"><span>Gross profit per unit</span><b>'+peso(profit)+'</b></div>'+
+    '<div class="sum-row"><span>Real margin (profit ÷ net revenue)</span><b>'+realPct.toFixed(1)+'%</b></div>'+
     (p.notes?'<div class="sum-row"><span>Notes</span><b style="text-align:right;font-weight:500">'+esc(p.notes)+'</b></div>':'')+
     '</div><div class="mbtns">'+
     '<button class="b-cancel" onclick="closeTop()">Close</button>'+
@@ -1304,7 +1382,8 @@ function importJSON(input){
           if(p.laborPct===undefined)p.laborPct=unit>0&&p.laborCost!==undefined?+(Number(p.laborCost)/unit*100).toFixed(2):DEFAULT_COST_PCT.laborPct;
           delete p.customCost;delete p.packagingCost;delete p.laborCost;
         }
-        if(p.wastagePct===undefined||p.wastagePct==='')p.wastagePct=DEFAULT_COST_PCT.wastagePct;
+        if(p.wastagePct===undefined||p.wastagePct===''){p.wastagePct=DEFAULT_COST_PCT.wastagePct;}
+        if(p.tax===undefined||p.tax===''||p.tax===null)p.tax=costDefaults.taxPct;
       });
       if(products.some(p=>!p.sku||!String(p.sku).trim())){
         [...products].reverse().forEach(p=>{ if(!p.sku||!String(p.sku).trim())p.sku=nextSku(); });
@@ -1328,17 +1407,18 @@ function importJSON(input){
 function exportCSV(){
   const head=['SKU','Category','Product Name','Supplier','Supplier SKU','Unit Cost','MOQ','Lead Time (Days)',
     'Customizable?','Status','Customization %','Customization Cost','Packaging %','Packaging Cost',
-    'Labor/Handling %','Labor/Handling Cost','Wastage Allowance %','TRUE COST','Target Margin %','Tax %',
-    'SELLING PRICE','Gross Profit','Notes','Description','All Suppliers'];
+    'Labor/Handling %','Labor/Handling Cost','Wastage Allowance %','Wastage Cost','TRUE COST','Target Margin %','Tax %',
+    'Net Price (ex-tax)','Tax Amount','SELLING PRICE','Gross Profit','Real Margin %','Notes','Description','All Suppliers'];
   const csvCell=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const rows=[...products].sort(bySku).map(p=>{
     const sp=supOf(p), amts=costAmounts(p), tc=trueCost(p), sell=sellPrice(p), gp=grossProfit(p);
+    const np=netPrice(p), tax=taxAmount(p), rm=realMargin(p);
     const all=(p.suppliers||[]).map(s=>(s.name||'?')+': '+(s.cost||0)).join('; ');
     return[p.sku,p.cat,p.name,sp.name,sp.supplierSku,sp.cost,sp.moq,sp.leadTime,
       p.customizable||'No',p.status||'Active',
       p.customPct||0,amts.cc.toFixed(2),p.packagingPct||0,amts.pc.toFixed(2),
-      p.laborPct||0,amts.lc.toFixed(2),p.wastagePct||0,
-      tc.toFixed(2),p.margin,p.tax,sell.toFixed(2),gp.toFixed(2),p.notes,p.desc,all]
+      p.laborPct||0,amts.lc.toFixed(2),p.wastagePct||0,amts.wc.toFixed(2),
+      tc.toFixed(2),p.margin,p.tax,np.toFixed(2),tax.toFixed(2),sell.toFixed(2),gp.toFixed(2),rm.toFixed(1),p.notes,p.desc,all]
       .map(csvCell).join(',');
   });
   const setRows=[];

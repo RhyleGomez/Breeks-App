@@ -99,22 +99,10 @@
 </script>
 <script>
 /* ── BREEKS client invoice link ──
-   The invoice data travels inside the link (#d=…), so the client can open it
-   on any phone/computer — no login, no server, no localStorage needed. */
+   Invoice data travels inside the link (compact), then is shortened via is.gd
+   so the email shows a short link. Works on any device — no login, no server. */
 (function(){
   var BASE='https://rhylegomez.github.io/Breeks-App/';
-  function clean(o){ // drop empty values to keep the link short
-    if(Array.isArray(o)) return o.map(clean);
-    if(o&&typeof o==='object'){
-      var r={}; Object.keys(o).forEach(function(k){
-        var v=clean(o[k]);
-        if(v===null||v===undefined||v===''||(typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===0)) return;
-        r[k]=v;
-      }); return r;
-    }
-    if(typeof o==='number') return Math.round(o*100)/100;
-    return o;
-  }
   function b64urlEncode(str){
     var bytes=new TextEncoder().encode(str), bin='';
     for(var i=0;i<bytes.length;i+=0x8000) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
@@ -126,25 +114,78 @@
     for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
   }
-  window.breeksInvLink=function(inv,co,signatories){
-    inv=inv||{}; co=co||{};
-    var snap=clean({
-      invoiceNo:inv.invoiceNo, date:inv.date, dueDate:inv.dueDate, status:inv.status,
-      client:inv.client?{name:inv.client.name,contact:inv.client.contact,phone:inv.client.phone,address:inv.client.address,tin:inv.client.tin}:null,
-      cart:(inv.cart||[]).map(function(it){return {name:it.customName||it.name,qty:it.qty,unit:it.unit,price:it.price,disc:it.disc,lineNote:it.lineNote||it.description||it.note,
-        dimMode:it.dimMode,dimW:it.dimW,dimH:it.dimH,dimUnit:it.dimUnit,ratePerSqFt:it.ratePerSqFt,rateUnit:it.rateUnit};}),
-      subtotal:inv.subtotal, vatTotal:inv.vatTotal, ewtPct:inv.ewtPct, ewtAmt:inv.ewtAmt, discount:inv.discount, globalDisc:inv.globalDisc,
-      otherCharges:(inv.otherCharges||[]).filter(function(oc){return oc&&(oc.label||parseFloat(oc.amount)>0);}).map(function(oc){return {label:oc.label,amount:parseFloat(oc.amount)||0};}),
-      total:inv.total, paymentMode:inv.paymentMode, paymentTerms:inv.paymentTerms, notes:inv.notes,
-      signatories:signatories||inv.signatories,
-      companySnap:{name:co.name,tagline:co.tagline,address:co.address,phone:co.phone,email:co.email,tin:co.tin,bank:co.bank}
-    });
-    return BASE+'?sign='+encodeURIComponent(inv.invoiceNo||'')+'#d='+b64urlEncode(JSON.stringify(snap));
+  function num(v){ v=parseFloat(v); return isFinite(v)?Math.round(v*100)/100:0; }
+  function str(v){ return v==null?'':String(v); }
+  function trim(arr){ while(arr.length&&(arr[arr.length-1]===''||arr[arr.length-1]===0||arr[arr.length-1]==null)) arr.pop(); return arr; }
+  function ymd(d){ if(!d) return ''; var x=new Date(d); if(isNaN(x)) return ''; return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+
+  // compact array format (v2)
+  function pack(inv,co,sg){
+    inv=inv||{}; co=co||{}; sg=sg||inv.signatories||{}; var c=inv.client||{};
+    var o={
+      n:str(inv.invoiceNo), d:ymd(inv.date), u:ymd(inv.dueDate),
+      c:trim([str(c.name),str(c.contact),str(c.phone),str(c.address),str(c.tin)]),
+      i:(inv.cart||[]).map(function(it){
+        var row=[str(it.customName||it.name),num(it.qty),str(it.unit),num(it.price),num(it.disc),str(it.lineNote||it.description||it.note)];
+        if(it.dimMode&&it.dimW&&it.dimH) row.push(str(it.dimW),str(it.dimH),str(it.dimUnit||'ft'),str(it.ratePerSqFt),str(it.rateUnit||'sq ft'));
+        return trim(row);
+      }),
+      t:trim([num(inv.subtotal),num(inv.vatTotal),num(inv.ewtPct),num(inv.ewtAmt),num(inv.discount),num(inv.globalDisc),num(inv.total)]),
+      k:trim([str(co.name),str(co.tagline),str(co.address),str(co.phone),str(co.tin)])
+    };
+    if(inv.status&&inv.status!=='Unpaid') o.s=inv.status;
+    var oc=(inv.otherCharges||[]).filter(function(x){return x&&(x.label||num(x.amount)>0);}).map(function(x){return [str(x.label),num(x.amount)];});
+    if(oc.length) o.o=oc;
+    var pm=trim([str(inv.paymentMode),str(inv.paymentTerms)]); if(pm.length) o.p=pm;
+    if(inv.notes) o.x=str(inv.notes);
+    var g=trim([str(sg.preparedBy),str(sg.checkedBy),str(sg.receivedBy)]); if(g.length) o.g=g;
+    return o;
+  }
+  function unpack(o){
+    var c=o.c||[], t=o.t||[], k=o.k||[], g=o.g||[], p=o.p||[];
+    var dt=function(v){return v?v+'T00:00:00':'';};
+    return {
+      invoiceNo:o.n, date:dt(o.d), dueDate:dt(o.u), status:o.s||'Unpaid',
+      client:{name:c[0]||'',contact:c[1]||'',phone:c[2]||'',address:c[3]||'',tin:c[4]||''},
+      cart:(o.i||[]).map(function(r){var it={name:r[0]||'',qty:r[1]||0,unit:r[2]||'',price:r[3]||0,disc:r[4]||0,lineNote:r[5]||''};
+        if(r.length>6){it.dimMode=true;it.dimW=r[6];it.dimH=r[7];it.dimUnit=r[8];it.ratePerSqFt=r[9];it.rateUnit=r[10];} return it;}),
+      subtotal:t[0]||0, vatTotal:t[1]||0, ewtPct:t[2]||0, ewtAmt:t[3]||0, discount:t[4]||0, globalDisc:t[5]||0, total:t[6]||0,
+      otherCharges:(o.o||[]).map(function(r){return {label:r[0],amount:r[1]};}),
+      paymentMode:p[0]||'', paymentTerms:p[1]||'', notes:o.x||'',
+      signatories:{preparedBy:g[0]||'',checkedBy:g[1]||'',receivedBy:g[2]||''},
+      companySnap:{name:k[0]||'',tagline:k[1]||'',address:k[2]||'',phone:k[3]||'',tin:k[4]||''}
+    };
+  }
+
+  // long (fallback) link
+  window.breeksInvLink=function(inv,co,sg){
+    return BASE+'?sign='+encodeURIComponent((inv&&inv.invoiceNo)||'')+'&j='+b64urlEncode(JSON.stringify(pack(inv,co,sg)));
   };
+
+  // short link via is.gd (JSONP); falls back to the long link if unavailable
+  function isgd(url){
+    return new Promise(function(resolve){
+      var cb='__breeksIsgd'+Date.now()+Math.floor(Math.random()*1e6), s=document.createElement('script'), done=false;
+      function fin(v){ if(done) return; done=true; clearTimeout(timer); try{delete window[cb];}catch(e){window[cb]=undefined;} if(s.parentNode) s.parentNode.removeChild(s); resolve(v); }
+      var timer=setTimeout(function(){fin(null);},7000);
+      window[cb]=function(d){ fin(d&&d.shorturl?d.shorturl:null); };
+      s.onerror=function(){fin(null);};
+      s.src='https://is.gd/create.php?format=json&callback='+cb+'&url='+encodeURIComponent(url);
+      document.head.appendChild(s);
+    });
+  }
+  window.breeksInvLinkShort=function(inv,co,sg){
+    var long=window.breeksInvLink(inv,co,sg);
+    if(long.length>4900) return Promise.resolve(long);
+    return isgd(long).then(function(short){ return short||long; });
+  };
+
+  // read invoice from current URL (v2 ?j=, v1 #d=, legacy ?d=)
   window.breeksReadInvLink=function(){
     try{
-      var h=(window.location.hash||'').replace(/^#/,''), m=h.match(/(?:^|&)d=([^&]+)/);
-      if(m) return JSON.parse(b64urlDecode(m[1]));
+      var q=new URLSearchParams(window.location.search), h=new URLSearchParams((window.location.hash||'').replace(/^#/,''));
+      var j=q.get('j')||h.get('j'); if(j) return unpack(JSON.parse(b64urlDecode(j)));
+      var d=h.get('d'); if(d) return JSON.parse(b64urlDecode(d));
     }catch(e){ console.warn('Invoice link decode failed',e); }
     return null;
   };
@@ -1449,10 +1490,11 @@ function App() {
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
-            const signLink = window.breeksInvLink(currentInv, co, signatories);
-            const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
             setInvEmailSending(true);
-            emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
+            window.breeksInvLinkShort(currentInv, co, signatories).then(signLink => {
+              const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice (PDF):\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
+              return emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com",invoice_link:signLink});
+            })
               .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("\u2705 Invoice sent to "+clientEmail);})
               .catch(err=>{setInvEmailSending(false);console.error("EmailJS error:",err);alert("Email send failed: "+(err?.text||err?.message||JSON.stringify(err)));});
           }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
@@ -1484,8 +1526,9 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
-            const link = window.breeksInvLink(currentInv, co, signatories);
-            navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link)).catch(()=>{prompt("Copy this link to share with client:",link);});
+            window.breeksInvLinkShort(currentInv, co, signatories).then(link => {
+              navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link)).catch(()=>{prompt("Copy this link to share with client:",link);});
+            });
           }} style={{padding:"11px 24px",background:"rgba(0,196,212,0.12)",border:"1px solid var(--brand-cyan)",color:"#00c4d4",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🔗 Copy Share Link</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
         </div>

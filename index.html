@@ -99,8 +99,8 @@
 </script>
 <script>
 /* ── BREEKS client invoice link ──
-   Invoice data travels inside the link (compact), then is shortened via is.gd
-   so the email shows a short link. Works on any device — no login, no server. */
+   Invoice data travels inside the link (compact), then gets a short code on our
+   own site: https://breeksdigital.com/i/?Ab3xYz — no third-party shorteners. */
 (function(){
   var BASE='https://rhylegomez.github.io/Breeks-App/';
   function b64urlEncode(str){
@@ -162,41 +162,22 @@
     return BASE+'?sign='+encodeURIComponent((inv&&inv.invoiceNo)||'')+'&j='+b64urlEncode(JSON.stringify(pack(inv,co,sg)));
   };
 
-  // ── Short link: tries several free shorteners in order, falls back to the long link
-  function ok(u,host){ return typeof u==='string' && (u=u.trim()) && u.indexOf('https://'+host+'/')===0 && u.length<60 ? u : null; }
-  function jsonp(api,url,host){
-    return new Promise(function(resolve){
-      var cb='__breeksShort'+Date.now()+Math.floor(Math.random()*1e6), s=document.createElement('script'), done=false;
-      function fin(v){ if(done) return; done=true; clearTimeout(timer); try{delete window[cb];}catch(e){window[cb]=undefined;} if(s.parentNode) s.parentNode.removeChild(s); resolve(v); }
-      var timer=setTimeout(function(){fin(null);},4500);
-      window[cb]=function(d){ if(d&&d.errormessage) console.warn(host+':',d.errormessage); fin(ok(d&&d.shorturl,host)); };
-      s.onerror=function(){fin(null);};
-      s.src=api+'?format=json&callback='+cb+'&url='+encodeURIComponent(url);
-      document.head.appendChild(s);
-    });
-  }
-  function textApi(api,url,host){
-    var ctl=window.AbortController?new AbortController():null, t=setTimeout(function(){ if(ctl) ctl.abort(); },4500);
-    return fetch(api+encodeURIComponent(url),{signal:ctl?ctl.signal:undefined})
-      .then(function(r){ return r.ok?r.text():null; })
-      .then(function(txt){ clearTimeout(t); return ok(txt,host); })
-      .catch(function(){ clearTimeout(t); return null; });
+  // Own short links on breeksdigital.com (upload i/index.php to public_html/i/)
+  var OWN_SHORTENER='https://breeksdigital.com/i/';
+  function ownShort(url){
+    var ctl=window.AbortController?new AbortController():null, t=setTimeout(function(){ if(ctl) ctl.abort(); },6000);
+    return fetch(OWN_SHORTENER,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({url:url}),signal:ctl?ctl.signal:undefined})
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(d){ clearTimeout(t); var u=d&&d.short; return (typeof u==='string'&&u.indexOf(OWN_SHORTENER+'?')===0)?u:null; })
+      .catch(function(e){ clearTimeout(t); console.warn('breeksdigital.com shortener unavailable',e); return null; });
   }
   var shortCache={};
   window.breeksShortenUrl=function(long){
     if(shortCache[long]) return Promise.resolve(shortCache[long]);
-    var tries=[
-      function(){ return jsonp('https://is.gd/create.php',long,'is.gd'); },
-      function(){ return textApi('https://tinyurl.com/api-create.php?url=',long,'tinyurl.com'); },
-      function(){ return jsonp('https://v.gd/create.php',long,'v.gd'); },
-      function(){ return textApi('https://da.gd/s?url=',long,'da.gd'); }
-    ];
-    var i=0;
-    function next(){
-      if(i>=tries.length){ console.warn('All link shorteners failed — using long link'); return Promise.resolve(long); }
-      return tries[i++]().then(function(short){ if(short){ shortCache[long]=short; return short; } return next(); });
-    }
-    return next();
+    return ownShort(long).then(function(short){
+      if(short){ shortCache[long]=short; return short; }
+      return long;   // no third-party fallback — caller warns before sending a long link
+    });
   };
   window.breeksInvLinkShort=function(inv,co,sg){
     var long=window.breeksInvLink(inv,co,sg);
@@ -1516,6 +1497,9 @@ function App() {
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
             setInvEmailSending(true);
             window.breeksInvLinkShort(currentInv, co, signatories).then(signLink => {
+              if(signLink.length>80 && !window.confirm("⚠️ Couldn't create the short link.\n\nCheck that i/index.php is uploaded to breeksdigital.com (public_html/i/).\n\nSend the email with the LONG link anyway?")){
+                const e=new Error("cancelled"); e.cancelled=true; throw e;
+              }
               const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice (PDF):\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
               const esc = v => String(v==null?"":v).replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
               const dateTxt = new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"});
@@ -1527,10 +1511,11 @@ function App() {
               return emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,message_html:msgHtml,reply_to:"sales@breeksdigital.com",invoice_link:signLink});
             })
               .then(()=>{setInvEmailSending(false);setInvEmailSent(true);alert("\u2705 Invoice sent to "+clientEmail);})
-              .catch(err=>{setInvEmailSending(false);console.error("EmailJS error:",err);alert("Email send failed: "+(err?.text||err?.message||JSON.stringify(err)));});
+              .catch(err=>{setInvEmailSending(false);if(err&&err.cancelled)return;console.error("EmailJS error:",err);alert("Email send failed: "+(err?.text||err?.message||JSON.stringify(err)));});
           }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
             {invEmailSending?"📤 Sending…":invEmailSent?"✅ Resend Email":"📧 Send to Client"}
           </button>
+          <span style={{alignSelf:"center",fontSize:10,color:"#475569"}}>build 0911-own</span>
           <button onClick={()=>window.breeksPrintOnePage(document.getElementById("receipt-area"))} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
           <button onClick={()=>{
             const newStatus = currentInv?.status==="Paid"?"Unpaid":"Paid";
@@ -1558,7 +1543,8 @@ function App() {
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
             window.breeksInvLinkShort(currentInv, co, signatories).then(link => {
-              navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link)).catch(()=>{prompt("Copy this link to share with client:",link);});
+              const note = link.length>80 ? "\n\n⚠️ Short link unavailable — check i/index.php on breeksdigital.com." : "";
+              navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link+note)).catch(()=>{prompt("Copy this link to share with client:",link);});
             });
           }} style={{padding:"11px 24px",background:"rgba(0,196,212,0.12)",border:"1px solid var(--brand-cyan)",color:"#00c4d4",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🔗 Copy Share Link</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>

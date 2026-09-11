@@ -16,6 +16,87 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+/* ── BREEKS one-page A4 PDF export ──
+   Fixes html2pdf offset/crop (windowWidth vs centered container) and
+   always fits the document onto a single A4 portrait page. */
+(function(){
+  var st=document.createElement('style');
+  st.textContent='.html2pdf__container{left:0!important;right:auto!important;margin:0!important;}';
+  document.head.appendChild(st);
+
+  function prepClone(src){
+    var clone=src.cloneNode(true);
+    // copy canvas bitmaps (cloneNode drops them)
+    var sc=src.querySelectorAll('canvas'), cc=clone.querySelectorAll('canvas');
+    for(var i=0;i<sc.length&&i<cc.length;i++){
+      try{cc[i].width=sc[i].width;cc[i].height=sc[i].height;cc[i].getContext('2d').drawImage(sc[i],0,0);}catch(e){}
+    }
+    // inputs → plain text (wraps properly, no placeholders/boxes)
+    var sf=src.querySelectorAll('input,textarea,select'), cf=clone.querySelectorAll('input,textarea,select');
+    for(var j=0;j<sf.length&&j<cf.length;j++){
+      var n=cf[j];
+      if(n.closest('.no-print')) continue;
+      var t=(n.type||'').toLowerCase();
+      if(t==='hidden'||t==='file'||t==='checkbox'||t==='radio'||t==='button'||t==='submit'){n.parentNode&&n.parentNode.removeChild(n);continue;}
+      var v=sf[j].value||'';
+      if(!v.trim()){n.parentNode&&n.parentNode.removeChild(n);continue;}
+      var d=document.createElement('div');
+      d.textContent=v;
+      d.style.cssText='font-size:'+(n.style.fontSize||'11px')+';color:'+(n.style.color||'#444')+';margin-top:'+(n.style.marginTop||'3px')+';white-space:pre-wrap;word-break:break-word;text-align:'+(n.style.textAlign||'left')+';';
+      n.parentNode&&n.parentNode.replaceChild(d,n);
+    }
+    // print rules
+    clone.querySelectorAll('.no-print').forEach(function(x){x.parentNode&&x.parentNode.removeChild(x);});
+    clone.querySelectorAll('.print-only').forEach(function(x){x.style.display='inline';});
+    clone.removeAttribute('id');
+    var s=clone.style;
+    s.width='100%';s.maxWidth='none';s.minWidth='0';s.margin='0';s.boxShadow='none';s.borderRadius='0';s.boxSizing='border-box';s.background='#fff';
+    return clone;
+  }
+
+  function toast(on){
+    var id='breeks-pdf-toast', el=document.getElementById(id);
+    if(!on){ if(el) el.remove(); return; }
+    if(el) return;
+    el=document.createElement('div'); el.id=id;
+    el.textContent='⏳ Generating PDF…';
+    el.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2d2080;color:#fff;padding:10px 22px;border-radius:20px;font:700 13px Roboto,Arial,sans-serif;z-index:2147483647;box-shadow:0 4px 16px rgba(0,0,0,.35);pointer-events:none;';
+    document.body.appendChild(el);
+  }
+
+  window.breeksOnePagePDF=function(srcEl,filename,marginMm){
+    if(!srcEl){return Promise.resolve();}
+    if(!window.html2pdf){alert('PDF engine still loading — please try again in a moment.');return Promise.resolve();}
+    if(window.__breeksPdfBusy) return Promise.resolve();
+    window.__breeksPdfBusy=true; toast(true);
+    var M=(marginMm==null)?8:marginMm;
+    var A4={unit:'mm',format:'a4',orientation:'portrait'};
+    var done=function(){window.__breeksPdfBusy=false;toast(false);};
+    var prepared=prepClone(srcEl);
+
+    // Pass 1: render at true A4 width (210mm ≈ 794px), pinned top-left
+    return window.html2pdf().set({
+      margin:[0,0,0,0], jsPDF:A4,
+      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',scrollX:0,scrollY:0,x:0,y:0,windowWidth:794},
+      pagebreak:{mode:['legacy']}
+    }).from(prepared).toCanvas().get('canvas').then(function(canvas){
+      // Pass 2: pad canvas to A4 inner ratio so it lands on exactly 1 page
+      var r=(297-2*M)/(210-2*M), cw=canvas.width, ch=canvas.height;
+      var tw=Math.max(cw,Math.ceil((ch+4)/r)), out=canvas;
+      if(tw>cw){
+        out=document.createElement('canvas'); out.width=tw; out.height=ch;
+        var ctx=out.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,tw,ch);
+        ctx.drawImage(canvas,Math.round((tw-cw)/2),0);
+      }
+      return window.html2pdf().set({
+        margin:[M,M,M,M], filename:filename||'document.pdf',
+        image:{type:'jpeg',quality:0.98}, jsPDF:A4
+      }).from(out,'canvas').save();
+    }).then(done,function(err){done();console.error('PDF error:',err);alert('PDF generation failed. Please try again.');});
+  };
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   (function(){ emailjs.init({ publicKey: "qteF9PEfrc2xnOfYa" }); })();
@@ -968,14 +1049,7 @@ function App() {
         const el = document.getElementById("receipt-area");
         if(!el || !window.html2pdf) return;
         const filename = (currentInv.invoiceNo||"invoice") + "_" + (currentInv.client?.name||"").replace(/\s+/g,"_") + ".pdf";
-        const opt = {
-          margin: [8,8,8,8], filename,
-          image: { type:"jpeg", quality:0.98 },
-          html2canvas: { scale:2, useCORS:true, letterRendering:true, scrollY:0, windowWidth:794 },
-          jsPDF: { unit:"mm", format:"a4", orientation:"portrait" },
-          pagebreak: { mode:["css","legacy"] }
-        };
-        window.html2pdf().set(opt).from(el).save();
+        window.breeksOnePagePDF(el, filename, 8);
       }, 600);
     }
   }, [view, currentInv?.invoiceNo, shouldAutoPdf]);
@@ -1249,11 +1323,8 @@ function App() {
               </div>
               {/* Received By */}
               <div style={{flex:1,textAlign:"center"}}>
-                <div style={{marginBottom:4,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center",border:"1px dashed #c0cfe8",borderRadius:6,background:"#f8f9ff"}}>
-                  {invRecvSign
-                    ? <img src={invRecvSign} alt="recv-sig" style={{maxHeight:64,maxWidth:"100%",objectFit:"contain"}}/>
-                    : <span style={{fontSize:10,color:"#bbb"}}>Awaiting client signature</span>
-                  }
+                <div style={{marginBottom:4,minHeight:70,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {invRecvSign&&<img src={invRecvSign} alt="recv-sig" style={{maxHeight:64,maxWidth:"100%",objectFit:"contain"}}/>}
                 </div>
                 <div style={{height:1,background:"#2d2080",margin:"4px 0"}}></div>
                 <div style={{fontSize:10,color:"#555",fontWeight:700}}>Received by</div>
@@ -1261,41 +1332,7 @@ function App() {
                 <div style={{fontSize:9,color:"#888"}}>Signature over printed name</div>
                 <div className="no-print" style={{marginTop:8}}>
                   <input type="text" value={signatories.receivedBy} onChange={e=>setSignatories(s=>({...s,receivedBy:e.target.value}))}
-                    placeholder="Receiver name" style={{width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center",marginBottom:6}}/>
-                  <SignaturePad color="#059669" savedSig={invRecvSign}
-                    onSave={sig=>{
-                      setInvRecvSign(sig);
-                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:sig,emailSent:true}:x));
-                      setCurrentInv(c=>({...c,recvSign:sig,emailSent:true}));
-                      // Send invoice email with sign link
-                      const clientEmail = currentInv?.client?.email||"";
-                      if(clientEmail){
-                        setInvEmailSending(true);
-                        const invNo = currentInv?.invoiceNo||"";
-                        const clientName = currentInv?.client?.name||"Client";
-                        const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
-                        const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:sig,status:currentInv.status,companySnap:currentInv.companySnap};
-                        try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
-                        const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
-                        const msgBody = `Dear ${clientName},\n\nThank you for your business.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
-                        emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
-                          .then(()=>{setInvEmailSending(false);setInvEmailSent(true);})
-                          .catch(err=>{setInvEmailSending(false);console.error("EmailJS error:",err);alert("Email send failed: "+(err?.text||err?.message||JSON.stringify(err)));});
-                      } else {
-                        setInvEmailSent(true);
-                      }
-                    }}
-                    onClear={()=>{
-                      setInvRecvSign(null);
-                      setInvEmailSent(false);
-                      setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,recvSign:null,emailSent:false}:x));
-                      setCurrentInv(c=>({...c,recvSign:null,emailSent:false}));
-                    }}/>
-                  {!invRecvSign && (
-                    <div style={{marginTop:6,fontSize:9,color:"#f59e0b",fontWeight:600,background:"#fffbeb",border:"1px solid #fde68a",borderRadius:4,padding:"4px 8px"}}>
-                      ✍️ Client must sign here to unlock PDF download
-                    </div>
-                  )}
+                    placeholder="Receiver name (optional)" style={{width:"100%",padding:"4px 8px",border:"1px solid #c0cfe8",borderRadius:4,fontSize:11,color:"#333",textAlign:"center",marginBottom:6}}/>
                   {invEmailSending && <div style={{marginTop:4,fontSize:10,color:"#6366f1",fontWeight:700}}>📤 Sending email…</div>}
                   {invEmailSent && !invEmailSending && <div style={{marginTop:4,fontSize:10,color:"#22c55e",fontWeight:700}}>✅ Invoice emailed to client</div>}
                 </div>
@@ -1306,12 +1343,10 @@ function App() {
         </div>
         <div className="no-print" style={{textAlign:"center",padding:20,background:"#0f172a",display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
           <button onClick={()=>{
-            if(!invRecvSign){alert("PDF download is locked until the client signs the invoice (Received by).");return;}
             const el = document.getElementById("receipt-area");
             const filename = (currentInv?.invoiceNo||"invoice") + "_" + (currentInv?.client?.name||"").replace(/\s+/g,"_") + ".pdf";
-            const opt = { margin:[8,8,8,8], filename, image:{type:"jpeg",quality:0.98}, html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0,windowWidth:794}, jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}, pagebreak:{mode:["css","legacy"]} };
-            window.html2pdf().set(opt).from(el).save();
-          }} style={{padding:"11px 24px",background:invRecvSign?"linear-gradient(135deg,#7c3aed,#4f46e5)":"#334155",color:invRecvSign?"#fff":"#94a3b8",border:invRecvSign?"none":"1px solid #475569",borderRadius:8,fontWeight:700,cursor:invRecvSign?"pointer":"not-allowed",fontSize:14,opacity:invRecvSign?1:0.6}} title={invRecvSign?"":"Requires client signature"}>⬇️ Download PDF {!invRecvSign&&"🔒"}</button>
+            window.breeksOnePagePDF(el, filename, 8);
+          }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>⬇️ Download PDF</button>
           <button onClick={()=>{
             const clientEmail = currentInv?.client?.email||prompt("Enter client email address:");
             if(!clientEmail) return;
@@ -2155,8 +2190,7 @@ function App() {
           <button onClick={()=>{
             const el=document.getElementById("quote-area");
             const filename=(q.quoteNo||"quote")+"_"+(q.client?.name||"").replace(/\s+/g,"_")+".pdf";
-            const opt={margin:[8,8,8,8],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0,windowWidth:794},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}};
-            window.html2pdf().set(opt).from(el).save();
+            window.breeksOnePagePDF(el, filename, 8);
           }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#d97706,#f59e0b)",color:"#1a1560",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>⬇️ Download PDF</button>
           <button onClick={()=>window.print()} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
           <button onClick={()=>{
@@ -4972,19 +5006,18 @@ function App() {
         </div>
 
         {/* Status bar */}
-        <div style={{maxWidth:720,margin:"0 auto 12px",background:clientSigned?"#16a34a":"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-          {clientSigned ? "✅ Invoice Acknowledged & Signed — You may now download your PDF" : "✍️ Please review the invoice below, then sign at the bottom"}
+        <div style={{maxWidth:720,margin:"0 auto 12px",background:"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+          📄 Review your invoice below — you may download the PDF anytime
         </div>
 
-        {/* Download button (shown after signing) */}
-        {clientSigned && (
+        {/* Download button */}
+        {signInv && (
           <div style={{maxWidth:720,margin:"0 auto 16px",display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
             <button onClick={()=>{
               const el = document.getElementById("sign-receipt-area");
               if(!el||!window.html2pdf) return;
               const filename = signInv.invoiceNo + "_" + (signInv.client?.name||"").replace(/\s+/g,"_") + ".pdf";
-              const opt = {margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
-              window.html2pdf().set(opt).from(el).save();
+              window.breeksOnePagePDF(el, filename, 8);
             }} style={{padding:"12px 28px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:"0 4px 16px rgba(124,58,237,0.4)"}}>
               ⬇️ Download Invoice PDF
             </button>
@@ -5100,35 +5133,6 @@ function App() {
               </div>
             </div>
           </div>
-          {/* Sign section (hidden after signing) */}
-          {!clientSigned && (
-            <div style={{padding:"20px 24px",background:"#f0f4ff",borderTop:"2px solid #2d2080"}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#1e293b",marginBottom:4}}>✍️ Sign to Acknowledge Receipt</div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>By signing below, you confirm receipt of the goods/services listed in this invoice.</div>
-              <input type="text" value={clientName} onChange={e=>setClientName(e.target.value)}
-                placeholder="Your full name (required)"
-                style={{width:"100%",padding:"9px 12px",border:"1.5px solid #c0cfe8",borderRadius:8,fontSize:13,color:"#1e293b",marginBottom:10,boxSizing:"border-box"}}/>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Draw your signature or upload an image:</div>
-              <SignaturePad color="#059669" savedSig={clientSig}
-                onSave={sig=>{
-                  if(!clientName.trim()){alert("Please enter your name before signing.");return;}
-                  setClientSig(sig);
-                  setClientSigned(true);
-                  try {
-                    localStorage.setItem(`pos_client_sig_${signMode}`,JSON.stringify({recvSign:sig,receivedBy:clientName,signedAt:new Date().toISOString()}));
-                    const raw=localStorage.getItem("pos_history");
-                    if(raw){const hist=JSON.parse(raw);localStorage.setItem("pos_history",JSON.stringify(hist.map(x=>x.invoiceNo===signMode?{...x,recvSign:sig,emailSent:true,signatories:{...x.signatories,receivedBy:clientName}}:x)));}
-                    // Send confirmation email back to sender
-                    const senderEmail = co.email || "sales@breeksdigital.com";
-                    const invDate = signInv.date ? new Date(signInv.date).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"}) : "";
-                    const confirmMsg = `Hi,\n\nYour invoice ${signMode} has been acknowledged and signed by the client.\n\nClient: ${clientName}\nInvoice No: ${signMode}\nDate: ${invDate}\nAmount: PHP ${Number(signInv.total||0).toLocaleString("en-PH",{minimumFractionDigits:2})}\nSigned at: ${new Date().toLocaleString("en-PH")}\n\nBest regards,\nBreeks Digital Invoice System`;
-                    emailjs.send("service_knunqeh","template_ll8llaf",{to_email:senderEmail,subject:`✅ Invoice ${signMode} Signed by ${clientName}`,message:confirmMsg,reply_to:senderEmail}).catch(()=>{});
-                  }catch(e){}
-                }}
-                onClear={()=>setClientSig(null)}/>
-              <div style={{marginTop:10,fontSize:11,color:"#94a3b8",textAlign:"center"}}>🔒 Your signature is securely linked to this invoice only.</div>
-            </div>
-          )}
           {/* Footer */}
           <div style={{padding:"10px 24px",background:"#f8fafc",textAlign:"center",fontSize:10,color:"#94a3b8"}}>
             {co.name||"Breeks Digital"}{co.address?" · "+co.address:""}{co.phone?" · "+co.phone:""} · This is a computer-generated invoice.
@@ -5136,14 +5140,13 @@ function App() {
         </div>
 
         {/* Bottom download button */}
-        {clientSigned && (
+        {signInv && (
           <div style={{maxWidth:720,margin:"16px auto 0",display:"flex",gap:10,justifyContent:"center"}}>
             <button onClick={()=>{
               const el=document.getElementById("sign-receipt-area");
               if(!el||!window.html2pdf)return;
               const filename=signInv.invoiceNo+"_"+(signInv.client?.name||"").replace(/\s+/g,"_")+".pdf";
-              const opt={margin:[5,5,5,5],filename,image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,letterRendering:true,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["avoid-all","css","legacy"]}};
-              window.html2pdf().set(opt).from(el).save();
+              window.breeksOnePagePDF(el, filename, 8);
             }} style={{padding:"12px 32px",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:"0 4px 16px rgba(124,58,237,0.4)"}}>
               ⬇️ Download Invoice PDF
             </button>

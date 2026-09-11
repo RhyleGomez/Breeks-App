@@ -97,6 +97,59 @@
   };
 })();
 </script>
+<script>
+/* ── BREEKS client invoice link ──
+   The invoice data travels inside the link (#d=…), so the client can open it
+   on any phone/computer — no login, no server, no localStorage needed. */
+(function(){
+  var BASE='https://rhylegomez.github.io/Breeks-App/';
+  function clean(o){ // drop empty values to keep the link short
+    if(Array.isArray(o)) return o.map(clean);
+    if(o&&typeof o==='object'){
+      var r={}; Object.keys(o).forEach(function(k){
+        var v=clean(o[k]);
+        if(v===null||v===undefined||v===''||(typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===0)) return;
+        r[k]=v;
+      }); return r;
+    }
+    if(typeof o==='number') return Math.round(o*100)/100;
+    return o;
+  }
+  function b64urlEncode(str){
+    var bytes=new TextEncoder().encode(str), bin='';
+    for(var i=0;i<bytes.length;i+=0x8000) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+    return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  function b64urlDecode(b){
+    b=b.replace(/-/g,'+').replace(/_/g,'/'); while(b.length%4) b+='=';
+    var bin=atob(b), bytes=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  window.breeksInvLink=function(inv,co,signatories){
+    inv=inv||{}; co=co||{};
+    var snap=clean({
+      invoiceNo:inv.invoiceNo, date:inv.date, dueDate:inv.dueDate, status:inv.status,
+      client:inv.client?{name:inv.client.name,contact:inv.client.contact,phone:inv.client.phone,address:inv.client.address,tin:inv.client.tin}:null,
+      cart:(inv.cart||[]).map(function(it){return {name:it.customName||it.name,qty:it.qty,unit:it.unit,price:it.price,disc:it.disc,lineNote:it.lineNote||it.description||it.note,
+        dimMode:it.dimMode,dimW:it.dimW,dimH:it.dimH,dimUnit:it.dimUnit,ratePerSqFt:it.ratePerSqFt,rateUnit:it.rateUnit};}),
+      subtotal:inv.subtotal, vatTotal:inv.vatTotal, ewtPct:inv.ewtPct, ewtAmt:inv.ewtAmt, discount:inv.discount, globalDisc:inv.globalDisc,
+      otherCharges:(inv.otherCharges||[]).filter(function(oc){return oc&&(oc.label||parseFloat(oc.amount)>0);}).map(function(oc){return {label:oc.label,amount:parseFloat(oc.amount)||0};}),
+      total:inv.total, paymentMode:inv.paymentMode, paymentTerms:inv.paymentTerms, notes:inv.notes,
+      signatories:signatories||inv.signatories,
+      companySnap:{name:co.name,tagline:co.tagline,address:co.address,phone:co.phone,email:co.email,tin:co.tin,bank:co.bank}
+    });
+    return BASE+'?sign='+encodeURIComponent(inv.invoiceNo||'')+'#d='+b64urlEncode(JSON.stringify(snap));
+  };
+  window.breeksReadInvLink=function(){
+    try{
+      var h=(window.location.hash||'').replace(/^#/,''), m=h.match(/(?:^|&)d=([^&]+)/);
+      if(m) return JSON.parse(b64urlDecode(m[1]));
+    }catch(e){ console.warn('Invoice link decode failed',e); }
+    return null;
+  };
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   (function(){ emailjs.init({ publicKey: "qteF9PEfrc2xnOfYa" }); })();
@@ -676,7 +729,10 @@ function App() {
     try {
       const p = new URLSearchParams(window.location.search);
       const sign = p.get("sign");
-      // First try localStorage snap saved when email was sent
+      // 1st: invoice data carried inside the link (works on any device)
+      const fromLink = window.breeksReadInvLink && window.breeksReadInvLink();
+      if (fromLink) return fromLink;
+      // 2nd: localStorage snap (same device only)
       if (sign) {
         const raw = localStorage.getItem(`pos_inv_snap_${sign}`);
         if (raw) return JSON.parse(raw);
@@ -1355,7 +1411,7 @@ function App() {
             const total = Number(currentInv?.total||0).toLocaleString("en-PH",{minimumFractionDigits:2});
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
-            const signLink = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
+            const signLink = window.breeksInvLink(currentInv, co, signatories);
             const msgBody = `Dear ${clientName},\n\nPlease find your invoice details below.\n\nInvoice No: ${invNo}\nDate: ${new Date(currentInv?.date||Date.now()).toLocaleDateString("en-PH",{day:"2-digit",month:"long",year:"numeric"})}\nAmount Due: PHP ${total}\nPayment Mode: ${currentInv?.paymentMode||"Cash"}\n\nView and download your invoice here:\n${signLink}\n\nFor questions, contact us at sales@breeksdigital.com.\n\nBest regards,\nBreeks Digital`;
             setInvEmailSending(true);
             emailjs.send("service_knunqeh","template_ll8llaf",{to_email:clientEmail,subject:`Invoice ${invNo} - Breeks Digital`,message:msgBody,reply_to:"sales@breeksdigital.com"})
@@ -1390,7 +1446,7 @@ function App() {
             const invNo = currentInv?.invoiceNo||"";
             const snap = {invoiceNo:currentInv.invoiceNo,date:currentInv.date,dueDate:currentInv.dueDate,client:currentInv.client,cart:currentInv.cart,total:currentInv.total,paymentMode:currentInv.paymentMode,paymentTerms:currentInv.paymentTerms,subtotal:currentInv.subtotal,vatTotal:currentInv.vatTotal,ewtPct:currentInv.ewtPct,ewtAmt:currentInv.ewtAmt,globalDisc:currentInv.globalDisc,discount:currentInv.discount,otherCharges:currentInv.otherCharges,otherTotal:currentInv.otherTotal,notes:currentInv.notes,signatories:{...currentInv.signatories},prepSign:invPrepSign||currentInv.prepSign||null,recvSign:currentInv.recvSign||null,status:currentInv.status,companySnap:currentInv.companySnap};
             try { localStorage.setItem(`pos_inv_snap_${invNo}`, JSON.stringify(snap)); } catch(e) {}
-            const link = `https://rhylegomez.github.io/Breeks-App/?sign=${invNo}`;
+            const link = window.breeksInvLink(currentInv, co, signatories);
             navigator.clipboard.writeText(link).then(()=>alert("✅ Share link copied!\n\n"+link)).catch(()=>{prompt("Copy this link to share with client:",link);});
           }} style={{padding:"11px 24px",background:"rgba(0,196,212,0.12)",border:"1px solid var(--brand-cyan)",color:"#00c4d4",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🔗 Copy Share Link</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
@@ -4984,7 +5040,7 @@ function App() {
         <div style={{textAlign:"center",padding:40}}>
           <div style={{fontSize:48,marginBottom:16}}>🔍</div>
           <div style={{fontSize:20,fontWeight:700,color:"#1e293b",marginBottom:8}}>Invoice Not Found</div>
-          <div style={{fontSize:14,color:"#64748b"}}>Invoice <b>{signMode}</b> could not be located.<br/>Please contact Breeks Digital.</div>
+          <div style={{fontSize:14,color:"#64748b"}}>Invoice <b>{signMode}</b> could not be opened.<br/>The link may be incomplete — please open the full link from the email, or contact Breeks Digital.</div>
         </div>
       </div>
     );
@@ -5007,7 +5063,7 @@ function App() {
 
         {/* Status bar */}
         <div style={{maxWidth:720,margin:"0 auto 12px",background:"#2d2080",color:"#fff",padding:"10px 20px",fontSize:13,fontWeight:700,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-          📄 Review your invoice below — you may download the PDF anytime
+          📄 Your invoice from {co.name||"Breeks Digital"} — tap Download to save a PDF copy
         </div>
 
         {/* Download button */}
@@ -5025,7 +5081,7 @@ function App() {
         )}
 
         {/* Printable invoice area */}
-        <div id="sign-receipt-area" style={{maxWidth:720,margin:"0 auto",background:"#fff",borderRadius:14,boxShadow:"0 4px 24px rgba(45,32,128,0.10)",overflow:"hidden",fontFamily:"Arial,sans-serif"}}>
+        <div id="sign-receipt-area" style={{maxWidth:720,margin:"0 auto",background:"#fff",color:"#1e293b",borderRadius:14,boxShadow:"0 4px 24px rgba(45,32,128,0.10)",overflow:"hidden",fontFamily:"Arial,sans-serif"}}>
           {/* Invoice header */}
           <div style={{padding:"20px 24px",borderBottom:"2px solid #2d2080",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
             <div>
@@ -5052,7 +5108,7 @@ function App() {
             {signInv.client?.tin&&<div style={{fontSize:12,color:"#64748b"}}>TIN: {signInv.client.tin}</div>}
           </div>
           {/* Items table */}
-          <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0"}}>
+          <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0",overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
                 <tr style={{background:"#2d2080",color:"#fff"}}>
@@ -5065,11 +5121,11 @@ function App() {
                 {(signInv.cart||[]).map((item,i)=>(
                   <tr key={i} style={{background:i%2===0?"#fff":"#f8faff",borderBottom:"1px solid #e2e8f0"}}>
                     <td style={{padding:"8px 10px",textAlign:"center",color:"#94a3b8"}}>{i+1}</td>
-                    <td style={{padding:"8px 10px",fontWeight:600,color:"#1e293b"}}>{item.customName||item.name}{item.note&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:400}}>{item.note}</div>}</td>
+                    <td style={{padding:"8px 10px",fontWeight:600,color:"#1e293b"}}>{item.customName||item.name}{(item.lineNote||item.note)&&<div style={{fontSize:10,color:"#64748b",fontWeight:400}}>{item.lineNote||item.note}</div>}{item.dimMode&&item.dimW&&item.dimH&&<div style={{fontSize:10,color:"#0891b2",fontWeight:600}}>{item.dimW}×{item.dimH} {item.dimUnit||"ft"} @ ₱{item.ratePerSqFt}/{item.rateUnit||"sq ft"}</div>}{(item.disc||0)>0&&<div style={{fontSize:10,color:"#c00",fontWeight:400}}>Less {item.disc}% discount</div>}</td>
                     <td style={{padding:"8px 10px",textAlign:"center"}}>{item.qty}</td>
                     <td style={{padding:"8px 10px",textAlign:"center",color:"#64748b"}}>{item.unit||""}</td>
                     <td style={{padding:"8px 10px",textAlign:"right"}}>₱{Number(item.price||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
-                    <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"#2d2080"}}>₱{Number((item.qty||0)*(item.price||0)).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
+                    <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:"#2d2080"}}>₱{Number((item.qty||0)*(item.price||0)*(1-(item.disc||0)/100)).toLocaleString("en-PH",{minimumFractionDigits:2})}</td>
                   </tr>
                 ))}
               </tbody>
@@ -5078,6 +5134,9 @@ function App() {
           {/* Totals */}
           <div style={{padding:"14px 24px",borderBottom:"1px solid #e2e8f0",display:"flex",justifyContent:"flex-end"}}>
             <div style={{minWidth:260}}>
+              {signInv.subtotal>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>Subtotal</span><span>₱{Number(signInv.subtotal||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
+              {(signInv.globalDisc||0)>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#c00"}}><span>Discount{signInv.discount?" ("+signInv.discount+"%)":""}</span><span>-₱{Number(signInv.globalDisc||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
+              {(signInv.otherCharges||[]).map((oc,i)=>(<div key={"oc"+i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>{oc.label||"Other Charge"}</span><span>₱{Number(oc.amount||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>))}
               {signInv.vatTotal>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>VAT</span><span>₱{Number(signInv.vatTotal||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
               {(signInv.ewtPct||0)>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12,color:"#64748b"}}><span>EWT ({signInv.ewtPct}%)</span><span>-₱{Number(signInv.ewtAmt||0).toLocaleString("en-PH",{minimumFractionDigits:2})}</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#2d2080",borderRadius:8,color:"#fff",fontWeight:900,fontSize:15,marginTop:6}}>

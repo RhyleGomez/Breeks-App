@@ -5610,9 +5610,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 <script>
 if ('serviceWorker' in navigator) {
+  // Always check for a newer service worker so fresh deploys load right away
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swReloaded) return; swReloaded = true; window.location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/Breeks-App/service-worker.js')
-      .then(r => console.log('SW registered:', r.scope))
+    navigator.serviceWorker.register('/Breeks-App/service-worker.js', { updateViaCache: 'none' })
+      .then(r => { console.log('SW registered:', r.scope); r.update(); })
       .catch(e => console.warn('SW registration failed:', e));
   });
 }

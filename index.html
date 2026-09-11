@@ -150,6 +150,44 @@
   };
 })();
 </script>
+<script>
+/* ── BREEKS one-page A4 PRINT ── measures the document and zooms it to fit one A4 page */
+(function(){
+  var st=document.createElement('style');
+  st.textContent='.breeks-measure .no-print{display:none!important}.breeks-measure .print-only{display:inline!important}';
+  document.head.appendChild(st);
+  window.breeksPrintOnePage=function(el){
+    if(!el){window.print();return;}
+    var id=el.id, M=8;                               // page margin (mm)
+    var pxW=(210-2*M)*96/25.4, pxH=(297-2*M)*96/25.4; // printable area in CSS px
+    var W=794;
+    // measure at A4 design width with print-only rules applied
+    var prevW=el.style.width, prevMax=el.style.maxWidth, prevPad=el.style.padding;
+    el.style.width=W+'px'; el.style.maxWidth=W+'px'; el.style.padding='16px 22px';
+    document.body.classList.add('breeks-measure');
+    var H=el.getBoundingClientRect().height;
+    document.body.classList.remove('breeks-measure');
+    el.style.width=prevW; el.style.maxWidth=prevMax; el.style.padding=prevPad;
+    var z=Math.min(pxW/W, (pxH*0.97)/Math.max(H,1));
+    z=Math.floor(z*1000)/1000;
+    if(el.parentElement) el.parentElement.setAttribute('data-print-parent','1');
+    var css='@media print{'+
+      '@page{size:A4 portrait;margin:'+M+'mm}'+
+      'html,body{background:#fff!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important}'+
+      '#root{height:auto!important;min-height:0!important}'+
+      '[data-print-parent]{min-height:0!important;height:auto!important;padding:0!important;margin:0!important;background:#fff!important}'+
+      '#'+id+'{display:block!important;width:'+W+'px!important;max-width:'+W+'px!important;padding:16px 22px!important;margin:0 auto!important;zoom:'+z+'!important;box-shadow:none!important;border-radius:0!important;box-sizing:border-box!important}'+
+      '#'+id+' input{border:none!important;background:transparent!important}'+
+      '#'+id+' input::placeholder{color:transparent!important}'+
+      '#'+id+' tr{page-break-inside:auto!important}'+
+    '}';
+    var tag=document.getElementById('breeks-print-fit');
+    if(!tag){tag=document.createElement('style');tag.id='breeks-print-fit';document.head.appendChild(tag);}
+    tag.textContent=css;
+    setTimeout(function(){window.print();},50);
+  };
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   (function(){ emailjs.init({ publicKey: "qteF9PEfrc2xnOfYa" }); })();
@@ -1420,7 +1458,7 @@ function App() {
           }} style={{padding:"11px 24px",background:invEmailSent?"#15803d":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
             {invEmailSending?"📤 Sending…":invEmailSent?"✅ Resend Email":"📧 Send to Client"}
           </button>
-          <button onClick={()=>window.print()} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
+          <button onClick={()=>window.breeksPrintOnePage(document.getElementById("receipt-area"))} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
           <button onClick={()=>{
             const newStatus = currentInv?.status==="Paid"?"Unpaid":"Paid";
             setHistory(h=>h.map(x=>x.invoiceNo===currentInv?.invoiceNo?{...x,status:newStatus}:x));
@@ -2248,7 +2286,7 @@ function App() {
             const filename=(q.quoteNo||"quote")+"_"+(q.client?.name||"").replace(/\s+/g,"_")+".pdf";
             window.breeksOnePagePDF(el, filename, 8);
           }} style={{padding:"11px 24px",background:"linear-gradient(135deg,#d97706,#f59e0b)",color:"#1a1560",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>⬇️ Download PDF</button>
-          <button onClick={()=>window.print()} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
+          <button onClick={()=>window.breeksPrintOnePage(document.getElementById("quote-area"))} style={{padding:"11px 24px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🖨️ Print</button>
           <button onClick={()=>{
             if(window.confirm("Convert this quotation to an Invoice? A new invoice will be added to history.")){
               const no="INV-"+String(invCounter).padStart(4,"0");

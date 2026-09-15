@@ -878,6 +878,7 @@ function App() {
   const [payments,    setPayments]    = useCloudState("pos_payments", [], appLoaded, cloudData);
   const [showPayModal, setShowPayModal] = useState(null); // invoiceNo or null
   const [pmForm,      setPmForm]      = useState({amount:"",method:"Cash",ref:"",date:new Date().toISOString().slice(0,10)});
+  const [editPay,     setEditPay]     = useState(null); // payment record being edited (null = new payment)
   const [ledgerClient, setLedgerClient] = useState(null);
   const [soaMonth,     setSoaMonth]     = useState("All");
   const [ledgerSearch, setLedgerSearch] = useState("");
@@ -979,6 +980,144 @@ function App() {
   const [pForm, setPForm] = useState(emptyP);
   const [cForm, setCForm] = useState(emptyC);
   const showBadge = () => { setBadge(true); setTimeout(()=>setBadge(false),2000); };
+  // ===== Payment records: shared open / recalc / editable modal =====
+  const samePay = (a,b) => !!a && !!b && (a===b || (a.id && b.id && a.id===b.id));
+  const payTotalFor = (list,no) => list.filter(p=>p.invoiceNo===no).reduce((s,p)=>s+(p.amount||0),0);
+  const statusFromPaid = (paid,total) => (paid>0 && paid >= (total||0)-0.01) ? "Paid" : (paid>0 ? "Partial" : "Unpaid");
+  const recalcInvStatus = (invoiceNo, payList) => {
+    const paid = payTotalFor(payList, invoiceNo);
+    setHistory(h=>h.map(inv=> inv.invoiceNo===invoiceNo ? {...inv, status: statusFromPaid(paid, inv.total)} : inv));
+    setCurrentInv(c=> (c && c.invoiceNo===invoiceNo) ? {...c, status: statusFromPaid(paid, c.total)} : c);
+  };
+  const openPayModal = (inv) => {
+    if(!inv) return;
+    const bal = (inv.total||0) - payTotalFor(payments, inv.invoiceNo);
+    setEditPay(null);
+    setPmForm({amount: bal>0?bal.toFixed(2):"", method:"Cash", ref:"", date:new Date().toISOString().slice(0,10)});
+    setShowPayModal(inv.invoiceNo);
+  };
+  const renderPayModal = () => {
+    if(!showPayModal) return null;
+    const inv = history.find(x=>x.invoiceNo===showPayModal);
+    if(!inv) return null;
+    const invPays = payments.filter(p=>p.invoiceNo===inv.invoiceNo);
+    const paid = invPays.reduce((s,p)=>s+(p.amount||0),0);
+    const bal  = (inv.total||0) - paid;
+    const closeModal = () => { setShowPayModal(null); setEditPay(null); };
+    const resetForm = () => {
+      const b = (inv.total||0) - payTotalFor(payments, inv.invoiceNo);
+      setEditPay(null);
+      setPmForm({amount: b>0?b.toFixed(2):"", method:"Cash", ref:"", date:new Date().toISOString().slice(0,10)});
+    };
+    const startEdit = (p) => {
+      setEditPay(p);
+      setPmForm({
+        amount: String(p.amount ?? ""),
+        method: p.method || "Cash",
+        ref: p.ref || "",
+        date: p.date ? new Date(p.date).toISOString().slice(0,10) : new Date().toISOString().slice(0,10)
+      });
+    };
+    const deletePay = (p) => {
+      if(!window.confirm("Delete this payment of "+peso(p.amount)+"?")) return;
+      const next = payments.filter(x=>!samePay(x,p));
+      setPayments(next);
+      recalcInvStatus(inv.invoiceNo, next);
+      if(samePay(editPay,p)){
+        const b = (inv.total||0) - payTotalFor(next, inv.invoiceNo);
+        setEditPay(null);
+        setPmForm({amount: b>0?b.toFixed(2):"", method:"Cash", ref:"", date:new Date().toISOString().slice(0,10)});
+      }
+      showBadge();
+    };
+    const savePay = () => {
+      const amt = parseFloat(pmForm.amount);
+      if(!amt || amt<=0){ alert("Enter a valid amount."); return; }
+      const iso = pmForm.date ? new Date(pmForm.date).toISOString() : new Date().toISOString();
+      const next = editPay
+        ? payments.map(x => samePay(x,editPay) ? {...x, amount:amt, method:pmForm.method, ref:pmForm.ref, date:iso} : x)
+        : [...payments, {id:"pay_"+Date.now()+"_"+Math.random().toString(36).slice(2,7), invoiceNo:inv.invoiceNo, amount:amt, method:pmForm.method, ref:pmForm.ref, date:iso}];
+      setPayments(next);
+      recalcInvStatus(inv.invoiceNo, next);
+      showBadge();
+      closeModal();
+    };
+    const isEditing = !!editPay;
+    return (
+      <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&closeModal()}>
+        <div className="modal-box" style={{maxWidth:400}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontWeight:800,fontSize:15,color:"#f1f5f9"}}>{isEditing?"✏️ Edit Payment":"💳 Record Payment"}</div>
+            <button onClick={closeModal} style={{background:"#334155",border:"none",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:16}}>✕</button>
+          </div>
+          <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:12}}>
+            <div style={{color:"var(--bm)",fontWeight:600}}>{inv.invoiceNo} · {inv.client?.name}</div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+              <span style={{color:"#94a3b8"}}>Invoice Total:</span><span style={{fontWeight:700,color:"#fff"}}>{peso(inv.total)}</span>
+            </div>
+            {paid>0&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+              <span style={{color:"#94a3b8"}}>Already Paid:</span><span style={{fontWeight:700,color:"#22c55e"}}>{peso(paid)}</span>
+            </div>}
+            <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid var(--brand-border)",marginTop:6,paddingTop:6}}>
+              <span style={{color:"#94a3b8"}}>Balance:</span><span style={{fontWeight:900,color:bal>0.01?"#f59e0b":"#22c55e",fontSize:14}}>{peso(bal)}</span>
+            </div>
+          </div>
+          {invPays.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div className="form-label" style={{marginBottom:6}}>Recorded Payments — tap ✏️ to correct</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:180,overflowY:"auto"}}>
+                {invPays.map((p,i)=>{
+                  const on = samePay(editPay,p);
+                  return (
+                    <div key={p.id||i} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",borderRadius:7,background:on?"rgba(245,158,11,0.14)":"var(--bg)",border:on?"1px solid #f59e0b":"1px solid var(--brand-border)"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:800,color:"#22c55e"}}>{peso(p.amount)}</div>
+                        <div style={{fontSize:10,color:"var(--bm)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {p.date?new Date(p.date).toLocaleDateString("en-PH",{day:"2-digit",month:"short",year:"numeric"}):"—"} · {p.method||"Cash"}{p.ref?" · "+p.ref:""}
+                        </div>
+                      </div>
+                      <button onClick={()=>startEdit(p)} style={{background:on?"#f59e0b":"rgba(245,158,11,0.15)",border:"1px solid #f59e0b",color:on?"#fff":"#fbbf24",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:12,fontWeight:700}}>✏️</button>
+                      <button onClick={()=>deletePay(p)} style={{background:"rgba(239,68,68,0.12)",border:"1px solid #ef4444",color:"#f87171",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:12,fontWeight:700}}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {isEditing&&(
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(245,158,11,0.12)",border:"1px solid #f59e0b",borderRadius:7,padding:"7px 10px",marginBottom:10}}>
+              <span style={{fontSize:11,color:"#fbbf24",fontWeight:700}}>Editing existing payment</span>
+              <button onClick={resetForm} style={{background:"none",border:"1px solid #64748b",color:"#94a3b8",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:700}}>Cancel edit</button>
+            </div>
+          )}
+          <div style={{marginBottom:10}}>
+            <div className="form-label">Amount (₱)</div>
+            <input className="form-input" type="number" min="0" step="0.01" value={pmForm.amount} onChange={e=>setPmForm(p=>({...p,amount:e.target.value}))} placeholder="0.00"/>
+          </div>
+          <div style={{display:"flex",gap:10,marginBottom:10}}>
+            <div style={{flex:1}}>
+              <div className="form-label">Method</div>
+              <select className="form-input" value={pmForm.method} onChange={e=>setPmForm(p=>({...p,method:e.target.value}))}>
+                {["Cash","Bank Transfer","GCash","Maya","Cheque","Other"].map(m=><option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{flex:1}}>
+              <div className="form-label">Date</div>
+              <input className="form-input" type="date" value={pmForm.date} onChange={e=>setPmForm(p=>({...p,date:e.target.value}))} style={{colorScheme:"dark"}}/>
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div className="form-label">Reference No. (optional)</div>
+            <input className="form-input" type="text" value={pmForm.ref} onChange={e=>setPmForm(p=>({...p,ref:e.target.value}))} placeholder="Transaction / cheque no."/>
+          </div>
+          <button onClick={savePay} style={{width:"100%",padding:"11px 0",background:isEditing?"linear-gradient(135deg,#f59e0b,#d97706)":"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:8,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>
+            {isEditing?"💾 Update Payment":"✅ Record Payment"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   useEffect(() => {
     if (!appLoaded || history.length === 0) return;
     const recorded = new Set(salesItems.map(r => r.invoiceNo));
@@ -1531,12 +1670,7 @@ function App() {
           }} style={{padding:"11px 24px",background:currentInv?.status==="Paid"?"#f59e0b":"#22c55e",color:"#fff",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>
             {currentInv?.status==="Paid"?"↩ Mark Unpaid":"✅ Mark as Paid"}
           </button>
-          <button onClick={()=>{
-            const paid2=payments.filter(p=>p.invoiceNo===currentInv?.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);
-            const bal2=(currentInv?.total||0)-paid2;
-            setPmForm({amount:bal2>0?bal2.toFixed(2):"",method:"Cash",ref:"",date:new Date().toISOString().slice(0,10)});
-            setShowPayModal(currentInv?.invoiceNo);
-          }} style={{padding:"11px 24px",background:"rgba(34,197,94,0.15)",border:"1px solid #22c55e",color:"#4ade80",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>💳 Record Payment</button>
+          <button onClick={()=>openPayModal(currentInv)} style={{padding:"11px 24px",background:"rgba(34,197,94,0.15)",border:"1px solid #22c55e",color:"#4ade80",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>💳 Record Payment</button>
           <button onClick={()=>{setCart([]);setDiscount(0);setSelClient(null);setInvPrepSign(null);setInvRecvSign(null);setInvEmailSent(false);navigateTo("pos");}} style={{padding:"11px 24px",background:"#334155",color:"#f1f5f9",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>✚ New Invoice</button>
           <button onClick={()=>{
             const invNo = currentInv?.invoiceNo||"";
@@ -1549,50 +1683,7 @@ function App() {
           }} style={{padding:"11px 24px",background:"rgba(0,196,212,0.12)",border:"1px solid var(--brand-cyan)",color:"#00c4d4",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>🔗 Copy Share Link</button>
           <button onClick={()=>navigateTo("history")} style={{padding:"11px 24px",background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",borderRadius:8,fontWeight:700,cursor:"pointer",fontSize:14}}>← History</button>
         </div>
-        {showPayModal&&(()=>{
-          const inv=history.find(x=>x.invoiceNo===showPayModal);
-          if(!inv) return null;
-          const paid=payments.filter(p=>p.invoiceNo===inv.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);
-          const bal=(inv.total||0)-paid;
-          return (
-            <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowPayModal(null)}>
-              <div className="modal-box" style={{maxWidth:400}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div style={{fontWeight:800,fontSize:15,color:"#f1f5f9"}}>💳 Record Payment</div>
-                  <button onClick={()=>setShowPayModal(null)} style={{background:"#334155",border:"none",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:16}}>✕</button>
-                </div>
-                <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12}}>
-                  <div style={{color:"var(--bm)",fontWeight:600}}>{inv.invoiceNo} · {inv.client?.name}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}><span style={{color:"#94a3b8"}}>Invoice Total:</span><span style={{fontWeight:700,color:"#fff"}}>{peso(inv.total)}</span></div>
-                  {paid>0&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}><span style={{color:"#94a3b8"}}>Already Paid:</span><span style={{fontWeight:700,color:"#22c55e"}}>{peso(paid)}</span></div>}
-                  <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid var(--brand-border)",marginTop:6,paddingTop:6}}><span style={{color:"#94a3b8"}}>Balance:</span><span style={{fontWeight:900,color:bal>0?"#f59e0b":"#22c55e",fontSize:14}}>{peso(bal)}</span></div>
-                </div>
-                <div style={{marginBottom:10}}><div className="form-label">Amount (₱)</div><input className="form-input" type="number" min="0" step="0.01" value={pmForm.amount} onChange={e=>setPmForm(p=>({...p,amount:e.target.value}))} placeholder="0.00"/></div>
-                <div style={{display:"flex",gap:10,marginBottom:10}}>
-                  <div style={{flex:1}}><div className="form-label">Method</div><select className="form-input" value={pmForm.method} onChange={e=>setPmForm(p=>({...p,method:e.target.value}))}>{["Cash","Bank Transfer","GCash","Maya","Cheque","Other"].map(m=><option key={m}>{m}</option>)}</select></div>
-                  <div style={{flex:1}}><div className="form-label">Date</div><input className="form-input" type="date" value={pmForm.date} onChange={e=>setPmForm(p=>({...p,date:e.target.value}))} style={{colorScheme:"dark"}}/></div>
-                </div>
-                <div style={{marginBottom:14}}><div className="form-label">Reference No. (optional)</div><input className="form-input" type="text" value={pmForm.ref} onChange={e=>setPmForm(p=>({...p,ref:e.target.value}))} placeholder="Transaction / cheque no."/></div>
-                <button onClick={()=>{
-                  const amt=parseFloat(pmForm.amount);
-                  if(!amt||amt<=0){alert("Enter a valid amount.");return;}
-                  const payRec={id:"pay_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),invoiceNo:inv.invoiceNo,amount:amt,method:pmForm.method,ref:pmForm.ref,date:pmForm.date?new Date(pmForm.date).toISOString():new Date().toISOString()};
-                  setPayments(prev=>[...prev,payRec]);
-                  const newPaid=paid+amt;
-                  const isCreditMode=inv.paymentMode==="COD"||inv.paymentMode==="Terms";
-                  if(newPaid>=(inv.total||0)-0.01){
-                    setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo?{...x,status:"Paid"}:x));
-                    setCurrentInv(c=>c?{...c,status:"Paid"}:c);
-                  } else if(newPaid>0&&!isCreditMode){
-                    setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo&&x.status!=="Paid"?{...x,status:"Partial"}:x));
-                    setCurrentInv(c=>c&&c.status!=="Paid"?{...c,status:"Partial"}:c);
-                  }
-                  showBadge();setShowPayModal(null);
-                }} style={{width:"100%",padding:"11px 0",background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:8,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>✅ Record Payment</button>
-              </div>
-            </div>
-          );
-        })()}
+        {renderPayModal()}
       </div>
     );
   }
@@ -2472,7 +2563,7 @@ function App() {
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-start"}}>
-                  <button onClick={()=>{const paid2=payments.filter(p=>p.invoiceNo===inv.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);const bal2=(inv.total||0)-paid2;setPmForm({amount:bal2>0?bal2.toFixed(2):"",method:"Cash",ref:"",date:new Date().toISOString().slice(0,10)});setShowPayModal(inv.invoiceNo);}} style={{background:"#22c55e20",border:"1px solid #22c55e",color:"#4ade80",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>💳 Pay</button>
+                  <button onClick={()=>openPayModal(inv)} style={{background:"#22c55e20",border:"1px solid #22c55e",color:"#4ade80",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>💳 Pay</button>
                   <button onClick={()=>{setCurrentInv(inv);setView("receipt");}} style={{background:"#3b82f620",border:"1px solid #3b82f6",color:"#60a5fa",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>👁 View</button>
                   <button onClick={()=>{const ei={...inv,editCart:inv.cart.map(item=>item.lineId?item:{...item,lineId:'line_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)}),editDiscount:inv.discount,editVatOverride:inv.vatOverride??null,editEwtPct:inv.ewtPct??0,editClient:inv.client,editNotes:inv.notes||"",editPaymentMode:inv.paymentMode||"Cash",editPaymentTerms:inv.paymentTerms||"COD"};setShowPicker(false);setEditInv(ei);setTimeout(()=>setView("edit_invoice"),50);}} style={{background:"#a855f720",border:"1px solid #a855f7",color:"#c084fc",borderRadius:7,padding:"7px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ Edit</button>
                   <button onClick={()=>{
@@ -2509,71 +2600,7 @@ function App() {
           })
         }
       </div>
-      {showPayModal&&(()=>{
-        const inv = history.find(x=>x.invoiceNo===showPayModal);
-        if(!inv) return null;
-        const paid = payments.filter(p=>p.invoiceNo===inv.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);
-        const bal  = (inv.total||0) - paid;
-        return (
-          <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowPayModal(null)}>
-            <div className="modal-box" style={{maxWidth:400}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                <div style={{fontWeight:800,fontSize:15,color:"#f1f5f9"}}>💳 Record Payment</div>
-                <button onClick={()=>setShowPayModal(null)} style={{background:"#334155",border:"none",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:16}}>✕</button>
-              </div>
-              <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12}}>
-                <div style={{color:"var(--bm)",fontWeight:600}}>{inv.invoiceNo} · {inv.client?.name}</div>
-                <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                  <span style={{color:"#94a3b8"}}>Invoice Total:</span><span style={{fontWeight:700,color:"#fff"}}>{peso(inv.total)}</span>
-                </div>
-                {paid>0&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                  <span style={{color:"#94a3b8"}}>Already Paid:</span><span style={{fontWeight:700,color:"#22c55e"}}>{peso(paid)}</span>
-                </div>}
-                <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid var(--brand-border)",marginTop:6,paddingTop:6}}>
-                  <span style={{color:"#94a3b8"}}>Balance:</span><span style={{fontWeight:900,color:bal>0?"#f59e0b":"#22c55e",fontSize:14}}>{peso(bal)}</span>
-                </div>
-              </div>
-              <div style={{marginBottom:10}}>
-                <div className="form-label">Amount (₱)</div>
-                <input className="form-input" type="number" min="0" step="0.01" value={pmForm.amount} onChange={e=>setPmForm(p=>({...p,amount:e.target.value}))} placeholder="0.00"/>
-              </div>
-              <div style={{display:"flex",gap:10,marginBottom:10}}>
-                <div style={{flex:1}}>
-                  <div className="form-label">Method</div>
-                  <select className="form-input" value={pmForm.method} onChange={e=>setPmForm(p=>({...p,method:e.target.value}))}>
-                    {["Cash","Bank Transfer","GCash","Maya","Cheque","Other"].map(m=><option key={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <div className="form-label">Date</div>
-                  <input className="form-input" type="date" value={pmForm.date} onChange={e=>setPmForm(p=>({...p,date:e.target.value}))} style={{colorScheme:"dark"}}/>
-                </div>
-              </div>
-              <div style={{marginBottom:14}}>
-                <div className="form-label">Reference No. (optional)</div>
-                <input className="form-input" type="text" value={pmForm.ref} onChange={e=>setPmForm(p=>({...p,ref:e.target.value}))} placeholder="Transaction / cheque no."/>
-              </div>
-              <button onClick={()=>{
-                const amt = parseFloat(pmForm.amount);
-                if(!amt||amt<=0){alert("Enter a valid amount.");return;}
-                const payRec = {id:"pay_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),invoiceNo:inv.invoiceNo,amount:amt,method:pmForm.method,ref:pmForm.ref,date:pmForm.date?new Date(pmForm.date).toISOString():new Date().toISOString()};
-                setPayments(prev=>[...prev,payRec]);
-                const newPaid = paid + amt;
-                const isCreditMode = inv.paymentMode==="COD"||inv.paymentMode==="Terms";
-                if(newPaid>=(inv.total||0)-0.01){
-                  setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo?{...x,status:"Paid"}:x));
-                } else if(newPaid>0&&!isCreditMode){
-                  setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo&&x.status!=="Paid"?{...x,status:"Partial"}:x));
-                }
-                showBadge();
-                setShowPayModal(null);
-              }} style={{width:"100%",padding:"11px 0",background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:8,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>
-                ✅ Record Payment
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+      {renderPayModal()}
     </div>
   );}
   if(view==="ledger") {
@@ -2810,7 +2837,7 @@ function App() {
                           <div style={{textAlign:"right",fontWeight:700,fontSize:12,color:bal>0?"#f59e0b":"#22c55e"}}>{peso(bal)}</div>
                           <div style={{textAlign:"center"}}><span style={{fontSize:9,padding:"2px 6px",borderRadius:8,fontWeight:700,background:sc+"22",color:sc}}>{inv.status}</span></div>
                           <div style={{display:"flex",gap:4,justifyContent:"center"}}>
-                            <button onClick={()=>{const paidAmt2=payments.filter(p=>p.invoiceNo===inv.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);const bal2=(inv.total||0)-paidAmt2;setPmForm({amount:bal2>0?bal2.toFixed(2):"",method:"Cash",ref:"",date:new Date().toISOString().slice(0,10)});setShowPayModal(inv.invoiceNo);}} style={{fontSize:10,padding:"3px 7px",background:"#22c55e20",border:"1px solid #22c55e",color:"#4ade80",borderRadius:5,cursor:"pointer",fontWeight:600}}>💳</button>
+                            <button onClick={()=>openPayModal(inv)} style={{fontSize:10,padding:"3px 7px",background:"#22c55e20",border:"1px solid #22c55e",color:"#4ade80",borderRadius:5,cursor:"pointer",fontWeight:600}}>💳</button>
                             <button onClick={()=>{setCurrentInv(inv);setView("receipt");}} style={{fontSize:10,padding:"3px 7px",background:"#3b82f620",border:"1px solid #3b82f6",color:"#60a5fa",borderRadius:5,cursor:"pointer",fontWeight:600}}>👁</button>
                           </div>
                         </div>
@@ -2851,68 +2878,7 @@ function App() {
             })()}
           </div>
         </div>
-        {showPayModal&&(()=>{
-          const inv = history.find(x=>x.invoiceNo===showPayModal);
-          if(!inv) return null;
-          const paid = payments.filter(p=>p.invoiceNo===inv.invoiceNo).reduce((s,p)=>s+(p.amount||0),0);
-          const bal  = (inv.total||0) - paid;
-          return (
-            <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowPayModal(null)}>
-              <div className="modal-box" style={{maxWidth:400}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <div style={{fontWeight:800,fontSize:15,color:"#f1f5f9"}}>💳 Record Payment</div>
-                  <button onClick={()=>setShowPayModal(null)} style={{background:"#334155",border:"none",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:16}}>✕</button>
-                </div>
-                <div style={{background:"var(--bg)",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12}}>
-                  <div style={{color:"var(--bm)",fontWeight:600}}>{inv.invoiceNo} · {inv.client?.name}</div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                    <span style={{color:"#94a3b8"}}>Invoice Total:</span><span style={{fontWeight:700,color:"#fff"}}>{peso(inv.total)}</span>
-                  </div>
-                  {paid>0&&<div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
-                    <span style={{color:"#94a3b8"}}>Already Paid:</span><span style={{fontWeight:700,color:"#22c55e"}}>{peso(paid)}</span>
-                  </div>}
-                  <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid var(--brand-border)",marginTop:6,paddingTop:6}}>
-                    <span style={{color:"#94a3b8"}}>Balance:</span><span style={{fontWeight:900,color:bal>0?"#f59e0b":"#22c55e",fontSize:14}}>{peso(bal)}</span>
-                  </div>
-                </div>
-                <div style={{marginBottom:10}}>
-                  <div className="form-label">Amount (₱)</div>
-                  <input className="form-input" type="number" min="0" step="0.01" value={pmForm.amount} onChange={e=>setPmForm(p=>({...p,amount:e.target.value}))} placeholder="0.00"/>
-                </div>
-                <div style={{display:"flex",gap:10,marginBottom:10}}>
-                  <div style={{flex:1}}>
-                    <div className="form-label">Method</div>
-                    <select className="form-input" value={pmForm.method} onChange={e=>setPmForm(p=>({...p,method:e.target.value}))}>
-                      {["Cash","Bank Transfer","GCash","Maya","Cheque","Other"].map(m=><option key={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div style={{flex:1}}>
-                    <div className="form-label">Date</div>
-                    <input className="form-input" type="date" value={pmForm.date} onChange={e=>setPmForm(p=>({...p,date:e.target.value}))} style={{colorScheme:"dark"}}/>
-                  </div>
-                </div>
-                <div style={{marginBottom:14}}>
-                  <div className="form-label">Reference No. (optional)</div>
-                  <input className="form-input" type="text" value={pmForm.ref} onChange={e=>setPmForm(p=>({...p,ref:e.target.value}))} placeholder="Transaction / cheque no."/>
-                </div>
-                <button onClick={()=>{
-                  const amt = parseFloat(pmForm.amount);
-                  if(!amt||amt<=0){alert("Enter a valid amount.");return;}
-                  const payRec = {id:"pay_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),invoiceNo:inv.invoiceNo,amount:amt,method:pmForm.method,ref:pmForm.ref,date:pmForm.date?new Date(pmForm.date).toISOString():new Date().toISOString()};
-                  setPayments(prev=>[...prev,payRec]);
-                  const newPaid = paid + amt;
-                  if(newPaid>=(inv.total||0)-0.01 && inv.status==="Unpaid") {
-                    setHistory(h=>h.map(x=>x.invoiceNo===inv.invoiceNo?{...x,status:"Paid"}:x));
-                  }
-                  showBadge();
-                  setShowPayModal(null);
-                }} style={{width:"100%",padding:"11px 0",background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:8,color:"#fff",fontWeight:800,cursor:"pointer",fontSize:14}}>
-                  ✅ Record Payment
-                </button>
-              </div>
-            </div>
-          );
-        })()}
+        {renderPayModal()}
       </div>
     );
   }
@@ -4545,24 +4511,27 @@ function App() {
                   {activePay.length===0
                     ? <div style={{padding:30,color:"var(--bm)",textAlign:"center",fontSize:12}}>No payments in selected range.</div>
                     : (<>
-                      <div style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 32px",padding:"7px 14px",background:"var(--bs2)",fontSize:9,fontWeight:700,color:"var(--bm)",textTransform:"uppercase",letterSpacing:0.5,gap:8}}>
+                      <div style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 56px",padding:"7px 14px",background:"var(--bs2)",fontSize:9,fontWeight:700,color:"var(--bm)",textTransform:"uppercase",letterSpacing:0.5,gap:8}}>
                         <span>Date</span><span>Invoice</span><span>Client</span><span>Method</span><span>Ref</span><span style={{textAlign:"right"}}>Amount</span><span/>
                       </div>
                       {[...activePay].reverse().map((p,i)=>{
                         const inv = history.find(x=>x.invoiceNo===p.invoiceNo);
                         return (
-                          <div key={p.id||i} style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 32px",padding:"9px 14px",borderTop:"1px solid var(--brand-border)",background:i%2===0?"transparent":"rgba(255,255,255,0.02)",alignItems:"center",gap:8}}>
+                          <div key={p.id||i} style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 56px",padding:"9px 14px",borderTop:"1px solid var(--brand-border)",background:i%2===0?"transparent":"rgba(255,255,255,0.02)",alignItems:"center",gap:8}}>
                             <div style={{fontSize:11,color:"var(--bm)"}}>{new Date(p.date).toLocaleDateString("en-PH",{day:"2-digit",month:"short",year:"numeric"})}</div>
                             <div style={{fontSize:11,fontWeight:700,color:"var(--bc)"}}>{p.invoiceNo}</div>
                             <div style={{fontSize:11,color:"#f1f5f9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv?.client?.name||"—"}</div>
                             <div style={{fontSize:11,color:"var(--bm)"}}>{p.method||"Cash"}</div>
                             <div style={{fontSize:10,color:"#64748b"}}>{p.ref||"—"}</div>
                             <div style={{textAlign:"right",fontWeight:800,fontSize:12,color:"#22c55e"}}>{peso(p.amount)}</div>
-                            <button onClick={()=>{if(window.confirm("Delete this payment record?"))setPayments(prev=>prev.filter(x=>x.id!==p.id&&!(x.invoiceNo===p.invoiceNo&&x.date===p.date&&x.amount===p.amount)));}} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:12,padding:0}}>✕</button>
+                            <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+                              <button title="Edit payment" onClick={()=>{setEditPay(p);setPmForm({amount:String(p.amount??""),method:p.method||"Cash",ref:p.ref||"",date:p.date?new Date(p.date).toISOString().slice(0,10):new Date().toISOString().slice(0,10)});setShowPayModal(p.invoiceNo);}} style={{background:"none",border:"none",color:"#fbbf24",cursor:"pointer",fontSize:12,padding:0}}>✏️</button>
+                              <button title="Delete payment" onClick={()=>{if(window.confirm("Delete this payment record?")){const next=payments.filter(x=>!(x.id&&p.id?x.id===p.id:(x.invoiceNo===p.invoiceNo&&x.date===p.date&&x.amount===p.amount)));setPayments(next);recalcInvStatus(p.invoiceNo,next);}}} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:12,padding:0}}>✕</button>
+                            </div>
                           </div>
                         );
                       })}
-                      <div style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 32px",padding:"10px 14px",borderTop:"2px solid var(--brand-border)",background:"rgba(34,197,94,0.08)",gap:8}}>
+                      <div style={{display:"grid",gridTemplateColumns:"110px 110px 1fr 100px 90px 100px 56px",padding:"10px 14px",borderTop:"2px solid var(--brand-border)",background:"rgba(34,197,94,0.08)",gap:8}}>
                         <div style={{gridColumn:"1/6",fontWeight:800,fontSize:11,color:"#22c55e",textTransform:"uppercase",letterSpacing:0.5}}>Total Collected</div>
                         <div style={{textAlign:"right",fontWeight:900,color:"#22c55e",fontSize:14}}>{peso(totalCollected)}</div>
                         <div/>

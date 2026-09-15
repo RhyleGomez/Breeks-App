@@ -1935,6 +1935,55 @@ function App() {
                       </select>
                     </div>
                   </div>
+                  {(()=>{
+                    const invNo   = ei.invoiceNo;
+                    const invPays = payments.filter(pp=>pp.invoiceNo===invNo);
+                    const ePaid   = invPays.reduce((a,pp)=>a+(pp.amount||0),0);
+                    const eBal    = eTotal - ePaid;
+                    const openNew = ()=>{
+                      setEditPay(null);
+                      setPmForm({amount:eBal>0?eBal.toFixed(2):"",method:(ei.editPaymentMode!==undefined?ei.editPaymentMode:(ei.paymentMode||"Cash")),ref:"",date:new Date().toISOString().slice(0,10)});
+                      setShowPayModal(invNo);
+                    };
+                    const openEdit = (pp)=>{
+                      setEditPay(pp);
+                      setPmForm({amount:String(pp.amount??""),method:pp.method||"Cash",ref:pp.ref||"",date:pp.date?new Date(pp.date).toISOString().slice(0,10):new Date().toISOString().slice(0,10)});
+                      setShowPayModal(invNo);
+                    };
+                    const delPay = (pp)=>{
+                      if(!window.confirm("Delete this payment of "+peso(pp.amount)+"?")) return;
+                      const next = payments.filter(x=>!samePay(x,pp));
+                      setPayments(next);
+                      recalcInvStatus(invNo,next);
+                      showBadge();
+                    };
+                    return (
+                      <div style={{marginTop:10,border:"1.5px solid #c0cfe8",borderRadius:7,background:"#fff",padding:"10px 12px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+                          <div style={{fontSize:9,fontWeight:800,color:"#2d2080",textTransform:"uppercase",letterSpacing:1}}>💳 Payments Received</div>
+                          <button onClick={openNew} style={{background:"#22c55e",border:"none",color:"#fff",borderRadius:5,padding:"5px 12px",fontWeight:800,cursor:"pointer",fontSize:11,whiteSpace:"nowrap"}}>＋ Record Payment</button>
+                        </div>
+                        {invPays.length===0
+                          ? <div style={{fontSize:11,color:"#8494a8",padding:"4px 0"}}>No payments recorded for this invoice yet.</div>
+                          : invPays.map((pp,i)=>(
+                            <div key={pp.id||i} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",borderRadius:5,background:"#f6f5fc",border:"1px solid #dde3ef",marginBottom:5}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:800,color:"#15803d"}}>{peso(pp.amount)}</div>
+                                <div style={{fontSize:9,color:"#66748a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {pp.date?new Date(pp.date).toLocaleDateString("en-PH",{day:"2-digit",month:"short",year:"numeric"}):"—"} · {pp.method||"Cash"}{pp.ref?" · "+pp.ref:""}
+                                </div>
+                              </div>
+                              <button title="Edit payment" onClick={()=>openEdit(pp)} style={{background:"#fef3c7",border:"1px solid #f59e0b",color:"#b45309",borderRadius:5,padding:"5px 9px",cursor:"pointer",fontSize:11,fontWeight:700}}>✏️</button>
+                              <button title="Delete payment" onClick={()=>delPay(pp)} style={{background:"#fee2e2",border:"1px solid #ef4444",color:"#b91c1c",borderRadius:5,padding:"5px 9px",cursor:"pointer",fontSize:11,fontWeight:700}}>✕</button>
+                            </div>
+                          ))}
+                        <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #dde3ef",marginTop:6,paddingTop:6,fontSize:11}}>
+                          <span style={{color:"#555"}}>Paid: <b style={{color:"#15803d"}}>{peso(ePaid)}</b></span>
+                          <span style={{color:"#555"}}>Balance: <b style={{color:eBal>0.01?"#b45309":"#15803d"}}>{peso(eBal)}</b></span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{width:220,flexShrink:0,fontSize:11}}>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #dde3ef"}}><span>Subtotal</span><span style={{fontWeight:600}}>{peso(eSub)}</span></div>
@@ -1958,6 +2007,7 @@ function App() {
             </div>
           </div>
         </div>
+        {renderPayModal()}
       </div>
     );
   }
